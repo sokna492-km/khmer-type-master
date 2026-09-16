@@ -1,0 +1,6 @@
+{
+  "name": "Khmer Type Master",
+  "description": "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ (Khmer Typing Tutor) with 16-level curriculum, NiDA keyboard guide, and real-time typing analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

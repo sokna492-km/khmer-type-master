@@ -17,6 +17,7 @@ export const ZWSP = "\u200B"; // invisible word break
 export const ZWNJ = "\u200C";
 export const DOTTED_CIRCLE = "\u25CC";
 
+// eslint-disable-next-line no-misleading-character-class
 const COMBINING_RE = /[\u17B4-\u17D3\u17DD\u200C\uFE00-\uFE0F]/;
 
 export function isCombining(ch: string): boolean {
@@ -106,7 +107,5 @@ export function countClusters(text: string): number {
 }
 
 export function countWords(text: string): number {
-  return text
-    .split(/[\s\u200B]+/)
-    .filter((w) => w.length > 0).length;
+  return text.split(/[\s\u200B]+/).filter((w) => w.length > 0).length;
 }

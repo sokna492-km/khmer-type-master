@@ -95,7 +95,7 @@ export function useTypingSession(target: string, timeLimit?: number) {
     const accuracy = typed.length > 0 ? (correct / typed.length) * 100 : 100;
     const progress = target.length > 0 ? Math.min(correct / target.length, 1) * 100 : 0;
     const remaining =
-      timeLimit && startedAt !== null ? Math.max(timeLimit - elapsed, 0) : timeLimit ?? null;
+      timeLimit && startedAt !== null ? Math.max(timeLimit - elapsed, 0) : (timeLimit ?? null);
 
     return { elapsed, wpm, cpm, accuracy, mistakes, correct, progress, remaining };
   }, [tick, finishedAt, startedAt, typed, target, mistakes, timeLimit]);

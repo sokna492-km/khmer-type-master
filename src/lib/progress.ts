@@ -66,12 +66,7 @@ export function useProgress() {
     [],
   );
 
-  const reset = useCallback(() => {
-    setProgress({});
-    write({});
-  }, []);
-
-  return { progress, loaded, record, reset };
+  return { progress, loaded, record };
 }
 
 export function levelCompletion(

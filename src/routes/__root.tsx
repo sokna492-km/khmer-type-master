@@ -77,16 +77,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Khmer Type Master - រៀនវាយអក្សរខ្មែរ" },
+      {
+        name: "description",
+        content:
+          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្តារចុចបង្ហាញផ្ទាល់",
+      },
+      { name: "author", content: "Khmer Type Master" },
+      { property: "og:title", content: "Khmer Type Master - រៀនវាយអក្សរខ្មែរ" },
+      {
+        property: "og:description",
+        content:
+          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្តារចុចបង្ហាញផ្ទាល់",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:site", content: "@KhmerTypeMaster" },
     ],
     links: [
+      {
+        rel: "preconnect",
+        href: "https://fonts.googleapis.com",
+      },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,300..700;1,300..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap",
+      },
       {
         rel: "stylesheet",
         href: appCss,
@@ -102,11 +123,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Scripts />
       </body>

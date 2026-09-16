@@ -75,9 +75,7 @@ export const KEY_ROWS: KeyDef[][] = [
     { code: ".", normal: ".", shift: "៚" },
     { code: "/", normal: "៍", shift: "?" },
   ],
-  [
-    { code: "space", normal: " ", shift: ZWSP, wide: 8, label: "Space" },
-  ],
+  [{ code: "space", normal: " ", shift: ZWSP, wide: 8, label: "Space" }],
 ];
 
 export type KeyHint = { code: string; shift: boolean; altGr: boolean };
