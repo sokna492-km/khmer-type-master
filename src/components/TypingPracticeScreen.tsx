@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Level, Lesson } from "@/data/curriculum";
 import { type ProgressMap, lessonKey } from "@/lib/progress";
-import { isCombining, renderableCluster, ZWSP, COENG } from "@/lib/khmer";
-import { keyHintFor } from "@/lib/keymap";
+import { renderableCluster, ZWSP, splitClusters, clusterOffsets } from "@/lib/khmer";
+import { keyHintFor, KEY_LABELS } from "@/lib/keymap";
 import { KhmerKeyboard } from "@/components/KhmerKeyboard";
 import { playKeySound, isSoundEnabled, setSoundEnabled } from "@/lib/sound";
 import { cn } from "@/lib/utils";
+import { Tip } from "@/components/ui/tooltip";
 import {
   ArrowLeft,
   Clock,
@@ -17,7 +18,6 @@ import {
   VolumeX,
   Timer,
   Star,
-  ChevronRight,
 } from "lucide-react";
 
 interface TypingPracticeScreenProps {
@@ -31,7 +31,6 @@ interface TypingPracticeScreenProps {
   ) => void;
   onSelectLesson: (level: Level, lesson: Lesson) => void;
   onBackToOverview: () => void;
-  onToggleSidebar?: () => void;
 }
 
 export function TypingPracticeScreen({
@@ -41,85 +40,215 @@ export function TypingPracticeScreen({
   onRecordProgress,
   onSelectLesson,
   onBackToOverview,
-  onToggleSidebar,
 }: TypingPracticeScreenProps) {
   const [lineIndex, setLineIndex] = useState(0);
   const [showKeyboard, setShowKeyboard] = useState(true);
   const [soundOn, setSoundOn] = useState(true);
   const [fontSize, setFontSize] = useState<"normal" | "large" | "xlarge">("large");
-  const [isInputFocused, setIsInputFocused] = useState(true);
   const [showResultsModal, setShowResultsModal] = useState(false);
+  const [wrongFlash, setWrongFlash] = useState(false);
+  const [lessonResult, setLessonResult] = useState<{
+    wpm: number;
+    accuracy: number;
+    mistakes: number;
+    previousBest: { bestWpm: number; bestAccuracy: number } | null;
+    timedOut: boolean;
+  } | null>(null);
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
   }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const roundResults = useRef<Array<{ wpm: number; accuracy: number }>>([]);
+  const roundResults = useRef<Array<{ correctChars: number; mistakes: number; elapsed: number }>>(
+    [],
+  );
+  const recordedRef = useRef(false);
+  const typedRef = useRef("");
+  const mistakesRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const linePushedRef = useRef(false);
+  const lineStartedElapsedRef = useRef(0);
+  const lessonCorrectRef = useRef(0);
+  const wrongFlashTimerRef = useRef<number | null>(null);
 
   const currentTargetLine = lesson.lines[lineIndex] ?? lesson.lines[0] ?? "";
   const isLastLine = lineIndex >= lesson.lines.length - 1;
+  const isTimedLesson = Boolean(lesson.timeLimit);
 
   const [typed, setTyped] = useState("");
   const [mistakes, setMistakes] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [lessonFinished, setLessonFinished] = useState(false);
 
   const timerRef = useRef<number | null>(null);
 
-  const resetRound = useCallback(() => {
-    setTyped("");
-    setMistakes(0);
-    setStartTime(null);
-    setElapsedSeconds(0);
-    setIsCompleted(false);
+  typedRef.current = typed;
+  mistakesRef.current = mistakes;
+  elapsedRef.current = elapsedSeconds;
+
+  const clearRoundTimer = useCallback(() => {
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
   }, []);
 
+  const resetLineState = useCallback(() => {
+    setTyped("");
+    setMistakes(0);
+    setIsCompleted(false);
+    setWrongFlash(false);
+    linePushedRef.current = false;
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    setStartTime(null);
+    setElapsedSeconds(0);
+    clearRoundTimer();
+  }, [clearRoundTimer]);
+
   useEffect(() => {
     setLineIndex(0);
     roundResults.current = [];
+    recordedRef.current = false;
+    lessonCorrectRef.current = 0;
+    lineStartedElapsedRef.current = 0;
     setShowResultsModal(false);
-    resetRound();
-  }, [lesson.id, resetRound]);
+    setLessonResult(null);
+    setLessonFinished(false);
+    resetLineState();
+    resetTimer();
+  }, [lesson.id, resetLineState, resetTimer]);
 
   useEffect(() => {
-    resetRound();
-  }, [lineIndex, resetRound]);
-
-  useEffect(() => {
-    if (startTime && !isCompleted) {
-      timerRef.current = window.setInterval(() => {
-        const now = Date.now();
-        const secs = (now - startTime) / 1000;
-        setElapsedSeconds(secs);
-
-        if (lesson.timeLimit && secs >= lesson.timeLimit) {
-          setIsCompleted(true);
-          if (timerRef.current) {
-            window.clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-        }
-      }, 200);
+    resetLineState();
+    lineStartedElapsedRef.current = isTimedLesson ? elapsedRef.current : 0;
+    // Untimed lessons: each line has its own timer. Timed exams keep one clock.
+    if (!isTimedLesson) {
+      resetTimer();
     }
+  }, [lineIndex, isTimedLesson, resetLineState, resetTimer]);
+
+  const computeFromTotals = useCallback(
+    (correctChars: number, mistakeCount: number, elapsed: number) => {
+      const effectiveSecs = Math.max(elapsed, 0.5);
+      const minutes = effectiveSecs / 60;
+      const wpm = Math.round(correctChars / minutes / 5);
+      const totalKeypresses = correctChars + mistakeCount;
+      const accuracy =
+        totalKeypresses > 0
+          ? Math.max(0, Math.min(100, Math.round((correctChars / totalKeypresses) * 100)))
+          : 100;
+      return { wpm, accuracy, mistakes: mistakeCount };
+    },
+    [],
+  );
+
+  const finalizeLesson = useCallback(
+    (opts?: { timedOut?: boolean; includeCurrentLine?: boolean }) => {
+      if (recordedRef.current) return;
+      recordedRef.current = true;
+
+      clearRoundTimer();
+      setIsCompleted(true);
+      setLessonFinished(true);
+
+      if (opts?.includeCurrentLine && !linePushedRef.current) {
+        const lineElapsed = Math.max(
+          elapsedRef.current - lineStartedElapsedRef.current,
+          typedRef.current.length > 0 || mistakesRef.current > 0 ? 0.5 : 0,
+        );
+        roundResults.current.push({
+          correctChars: typedRef.current.length,
+          mistakes: mistakesRef.current,
+          elapsed: lineElapsed,
+        });
+        linePushedRef.current = true;
+      }
+
+      const allRounds = roundResults.current;
+      const totalCorrect = allRounds.reduce((acc, r) => acc + r.correctChars, 0);
+      const totalMistakes = allRounds.reduce((acc, r) => acc + r.mistakes, 0);
+      const totalElapsed = isTimedLesson
+        ? Math.max(elapsedRef.current, 0.5)
+        : Math.max(
+            allRounds.reduce((acc, r) => acc + r.elapsed, 0),
+            0.5,
+          );
+
+      const { wpm: finalWpm, accuracy: finalAccuracy } = computeFromTotals(
+        totalCorrect,
+        totalMistakes,
+        totalElapsed,
+      );
+
+      const key = lessonKey(level.id, lesson.id);
+      const previousBest = progress[key]
+        ? { bestWpm: progress[key]!.bestWpm, bestAccuracy: progress[key]!.bestAccuracy }
+        : null;
+
+      setLessonResult({
+        wpm: finalWpm,
+        accuracy: finalAccuracy,
+        mistakes: totalMistakes,
+        previousBest,
+        timedOut: Boolean(opts?.timedOut),
+      });
+
+      onRecordProgress(level.id, lesson.id, {
+        wpm: finalWpm,
+        accuracy: finalAccuracy,
+      });
+
+      window.setTimeout(() => {
+        setShowResultsModal(true);
+      }, 400);
+    },
+    [
+      clearRoundTimer,
+      computeFromTotals,
+      isTimedLesson,
+      level.id,
+      lesson.id,
+      onRecordProgress,
+      progress,
+    ],
+  );
+
+  useEffect(() => {
+    if (!startTime || lessonFinished) return;
+    if (!isTimedLesson && isCompleted) return;
+
+    timerRef.current = window.setInterval(() => {
+      const now = Date.now();
+      const secs = (now - startTime) / 1000;
+      setElapsedSeconds(secs);
+
+      if (lesson.timeLimit && secs >= lesson.timeLimit) {
+        clearRoundTimer();
+        finalizeLesson({ timedOut: true, includeCurrentLine: true });
+      }
+    }, 200);
 
     return () => {
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      clearRoundTimer();
     };
-  }, [startTime, isCompleted, lesson.timeLimit]);
+  }, [
+    startTime,
+    isCompleted,
+    lessonFinished,
+    isTimedLesson,
+    lesson.timeLimit,
+    clearRoundTimer,
+    finalizeLesson,
+  ]);
 
   const focusInput = useCallback(() => {
     if (inputRef.current) {
       inputRef.current.focus();
-      setIsInputFocused(true);
     }
   }, []);
 
@@ -127,110 +256,137 @@ export function TypingPracticeScreen({
     focusInput();
   }, [focusInput, lineIndex]);
 
+  const flashWrong = useCallback(() => {
+    setWrongFlash(true);
+    if (wrongFlashTimerRef.current) {
+      window.clearTimeout(wrongFlashTimerRef.current);
+    }
+    wrongFlashTimerRef.current = window.setTimeout(() => {
+      setWrongFlash(false);
+      wrongFlashTimerRef.current = null;
+    }, 160);
+  }, []);
+
+  const handleLineComplete = useCallback(
+    (finalTyped: string, lineMistakes: number) => {
+      if (linePushedRef.current) return;
+      linePushedRef.current = true;
+      setIsCompleted(true);
+
+      if (!isTimedLesson) {
+        clearRoundTimer();
+      }
+
+      const lineElapsed = isTimedLesson
+        ? Math.max(elapsedRef.current - lineStartedElapsedRef.current, 0.5)
+        : Math.max(elapsedRef.current, 0.5);
+
+      roundResults.current.push({
+        correctChars: finalTyped.length,
+        mistakes: lineMistakes,
+        elapsed: lineElapsed,
+      });
+      lessonCorrectRef.current += finalTyped.length;
+
+      if (!isLastLine) {
+        window.setTimeout(() => {
+          setLineIndex((prev) => prev + 1);
+        }, 400);
+      } else {
+        finalizeLesson({ timedOut: false, includeCurrentLine: false });
+      }
+    },
+    [clearRoundTimer, finalizeLesson, isLastLine, isTimedLesson],
+  );
+
   const currentTargetChar = currentTargetLine[typed.length] ?? "";
 
   const handleChange = (nextValue: string) => {
-    if (isCompleted) return;
+    if (isCompleted || lessonFinished) return;
 
-    if (!startTime) {
+    if (!startTime && nextValue.length > 0) {
       setStartTime(Date.now());
     }
 
+    // Backspace — allow deleting correct progress
     if (nextValue.length < typed.length) {
       setTyped(nextValue);
       return;
     }
 
-    const typedIndex = typed.length;
-    const expectedChar = currentTargetLine[typedIndex];
-    const incomingChar = nextValue[typedIndex];
+    if (nextValue.length === typed.length) return;
 
-    if (!expectedChar) return;
-
-    const isMatch = incomingChar === expectedChar;
-
-    if (isMatch) {
+    // Accept only when the new value is still an exact prefix of the target
+    if (currentTargetLine.startsWith(nextValue)) {
       playKeySound(false);
       setTyped(nextValue);
 
       if (nextValue.length >= currentTargetLine.length) {
-        handleLineComplete(nextValue);
+        handleLineComplete(nextValue, mistakesRef.current);
       }
-    } else {
-      playKeySound(true);
-      setMistakes((prev) => prev + 1);
-      setTyped(nextValue);
+      return;
+    }
+
+    // Wrong key — count mistake, do not advance
+    playKeySound(true);
+    setMistakes((prev) => prev + 1);
+    flashWrong();
+    if (inputRef.current) {
+      inputRef.current.value = typed;
     }
   };
 
   const calculateStats = useCallback(() => {
-    const totalChars = typed.length;
+    const finishedMistakes = roundResults.current.reduce((acc, r) => acc + r.mistakes, 0);
+    const correctChars = isTimedLesson ? lessonCorrectRef.current + typed.length : typed.length;
+    const mistakeCount = isTimedLesson ? finishedMistakes + mistakes : mistakes;
     const effectiveSecs = Math.max(elapsedSeconds, 0.5);
     const minutes = effectiveSecs / 60;
-    const cpm = minutes > 0 ? totalChars / minutes : 0;
+    const cpm = minutes > 0 ? correctChars / minutes : 0;
     const wpm = cpm / 5;
 
-    const totalKeypresses = totalChars + mistakes;
+    const totalKeypresses = correctChars + mistakeCount;
     const accuracy =
       totalKeypresses > 0
-        ? Math.max(0, Math.min(100, Math.round((totalChars / totalKeypresses) * 100)))
+        ? Math.max(0, Math.min(100, Math.round((correctChars / totalKeypresses) * 100)))
         : 100;
 
     const progress =
       currentTargetLine.length > 0
-        ? Math.min(100, Math.round((totalChars / currentTargetLine.length) * 100))
+        ? Math.min(100, Math.round((typed.length / currentTargetLine.length) * 100))
         : 0;
 
     const remaining = lesson.timeLimit ? Math.max(0, lesson.timeLimit - elapsedSeconds) : null;
 
-    return { wpm, cpm, accuracy, mistakes, progress, elapsed: elapsedSeconds, remaining };
-  }, [typed.length, mistakes, elapsedSeconds, currentTargetLine.length, lesson.timeLimit]);
-
-  const handleLineComplete = (finalTyped: string) => {
-    setIsCompleted(true);
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    const totalChars = finalTyped.length;
-    const effectiveSecs = Math.max(elapsedSeconds, 0.5);
-    const minutes = effectiveSecs / 60;
-    const wpm = Math.round(totalChars / minutes / 5);
-    const totalKeypresses = totalChars + mistakes;
-    const accuracy =
-      totalKeypresses > 0
-        ? Math.max(0, Math.min(100, Math.round((totalChars / totalKeypresses) * 100)))
-        : 100;
-
-    roundResults.current.push({ wpm, accuracy });
-
-    if (!isLastLine) {
-      window.setTimeout(() => {
-        setLineIndex((prev) => prev + 1);
-      }, 400);
-    } else {
-      const allRounds = roundResults.current;
-      const finalAvgWpm = Math.round(
-        allRounds.reduce((acc, curr) => acc + curr.wpm, 0) / (allRounds.length || 1),
-      );
-      const finalAvgAccuracy = Math.round(
-        allRounds.reduce((acc, curr) => acc + curr.accuracy, 0) / (allRounds.length || 1),
-      );
-
-      onRecordProgress(level.id, lesson.id, {
-        wpm: finalAvgWpm,
-        accuracy: finalAvgAccuracy,
-      });
-
-      window.setTimeout(() => {
-        setShowResultsModal(true);
-      }, 500);
-    }
-  };
+    return {
+      wpm,
+      cpm,
+      accuracy,
+      mistakes: mistakeCount,
+      progress,
+      elapsed: elapsedSeconds,
+      remaining,
+    };
+  }, [
+    typed.length,
+    mistakes,
+    elapsedSeconds,
+    currentTargetLine.length,
+    lesson.timeLimit,
+    isTimedLesson,
+  ]);
 
   const handleRestart = () => {
-    resetRound();
+    recordedRef.current = false;
+    roundResults.current = [];
+    lessonCorrectRef.current = 0;
+    lineStartedElapsedRef.current = 0;
+    setShowResultsModal(false);
+    setLessonResult(null);
+    setLessonFinished(false);
+    setLineIndex(0);
+    resetLineState();
+    resetTimer();
     focusInput();
   };
 
@@ -243,8 +399,9 @@ export function TypingPracticeScreen({
   const handleGoToNextLesson = () => {
     setShowResultsModal(false);
     const currentLessonIdx = level.lessons.findIndex((l) => l.id === lesson.id);
-    if (currentLessonIdx >= 0 && currentLessonIdx < level.lessons.length - 1) {
-      onSelectLesson(level, level.lessons[currentLessonIdx + 1]);
+    const nextLesson = currentLessonIdx >= 0 ? level.lessons[currentLessonIdx + 1] : undefined;
+    if (nextLesson) {
+      onSelectLesson(level, nextLesson);
     } else {
       onBackToOverview();
     }
@@ -254,16 +411,21 @@ export function TypingPracticeScreen({
   const nextChar = currentTargetChar;
   const nextHint = nextChar ? keyHintFor(nextChar) : null;
 
-  const starsEarned =
-    stats.accuracy >= 95 && stats.wpm >= 25
-      ? 3
-      : stats.accuracy >= 85
-        ? 2
-        : stats.accuracy >= 65
-          ? 1
-          : 1;
+  const resultWpm = lessonResult?.wpm ?? Math.round(stats.wpm);
+  const resultAccuracy = lessonResult?.accuracy ?? Math.round(stats.accuracy);
+  const resultMistakes = lessonResult?.mistakes ?? stats.mistakes;
 
-  const previousRecord = progress[lessonKey(level.id, lesson.id)];
+  const starsEarned =
+    resultAccuracy >= 95 && resultWpm >= 25
+      ? 3
+      : resultAccuracy >= 85
+        ? 2
+        : resultAccuracy >= 65
+          ? 1
+          : 0;
+
+  const targetClusters = splitClusters(currentTargetLine);
+  const targetOffsets = clusterOffsets(currentTargetLine);
 
   return (
     <div
@@ -283,101 +445,101 @@ export function TypingPracticeScreen({
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary transition-colors cursor-pointer shrink-0"
             >
               <ArrowLeft className="size-4" />
-              <span className="km">ត្រឡប់</span>
+              <span className="km">ត្រលប់</span>
             </button>
 
-            {onToggleSidebar && (
-              <button
-                onClick={onToggleSidebar}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors lg:hidden shrink-0"
-              >
-                <ChevronRight className="size-4" />
-                <span className="km text-sm">កម្រិត</span>
-              </button>
-            )}
-
-            <div className="min-w-0 flex items-center gap-2">
-              <span className="km text-sm font-bold text-primary bg-primary-soft px-2.5 py-1 rounded shrink-0">
-                {level.badge}
-              </span>
-              <h2 className="km text-sm sm:text-base font-bold text-foreground truncate">
-                {lesson.title}
-              </h2>
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="km text-sm font-bold text-primary bg-primary-soft px-2.5 py-1 rounded shrink-0">
+                  {level.badge}
+                </span>
+                <h2 className="km text-sm sm:text-base font-bold text-foreground truncate">
+                  {lesson.title}
+                </h2>
+              </div>
+              {lesson.hint && (
+                <p className="km text-xs sm:text-sm text-muted-foreground truncate pl-0.5">
+                  {lesson.hint}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Right: Controls */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="km text-sm bg-secondary px-3 py-1.5 rounded-md text-secondary-foreground font-medium">
-              ជុំទី {lineIndex + 1}/{lesson.lines.length}
-            </div>
-
             {/* Font size */}
-            <div className="hidden sm:flex items-center border border-border rounded-lg overflow-hidden bg-background">
-              {(["normal", "large", "xlarge"] as const).map((size) => (
-                <button
-                  key={size}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFontSize(size);
-                  }}
-                  className={cn(
-                    "px-2.5 py-1 text-sm font-bold transition-colors cursor-pointer",
-                    fontSize === size
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  A
-                </button>
+            <div
+              className="hidden sm:flex items-center gap-0.5 rounded-lg border border-border bg-secondary/50 p-0.5"
+              role="group"
+              aria-label="ទំហំអក្សរ"
+            >
+              {(
+                [
+                  { value: "normal", label: "តូច", preview: "text-[10px]" },
+                  { value: "large", label: "កណ្តាល", preview: "text-xs" },
+                  { value: "xlarge", label: "ធំ", preview: "text-sm" },
+                ] as const
+              ).map(({ value, label, preview }) => (
+                <Tip key={value} label={`អក្សរ${label}`}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFontSize(value);
+                    }}
+                    aria-label={`ទំហំអក្សរ${label}`}
+                    aria-pressed={fontSize === value}
+                    className={cn(
+                      "inline-flex h-7 min-w-8 items-center justify-center rounded-md font-bold leading-none transition-all cursor-pointer",
+                      preview,
+                      fontSize === value
+                        ? "bg-background text-primary shadow-sm ring-1 ring-border"
+                        : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                    )}
+                  >
+                    A
+                  </button>
+                </Tip>
               ))}
             </div>
 
             {/* Audio Toggle */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSound();
-              }}
-              className={cn(
-                "p-2 rounded-lg border transition-colors cursor-pointer",
-                soundOn
-                  ? "border-primary/40 bg-primary-soft text-primary"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground",
-              )}
-              title={soundOn ? "បិទសំឡេង" : "បើកសំឡេង"}
-            >
-              {soundOn ? <Volume2 className="size-4.5" /> : <VolumeX className="size-4.5" />}
-            </button>
+            <Tip label={soundOn ? "បិទសំឡេង" : "បើកសំឡេង"}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSound();
+                }}
+                aria-label={soundOn ? "បិទសំឡេង" : "បើកសំឡេង"}
+                className={cn(
+                  "p-2 rounded-lg border transition-colors cursor-pointer",
+                  soundOn
+                    ? "border-primary/40 bg-primary-soft text-primary"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {soundOn ? <Volume2 className="size-4.5" /> : <VolumeX className="size-4.5" />}
+              </button>
+            </Tip>
 
             {/* Keyboard Guide Toggle */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowKeyboard(!showKeyboard);
-              }}
-              className={cn(
-                "p-2 rounded-lg border transition-colors cursor-pointer",
-                showKeyboard
-                  ? "border-primary/40 bg-primary-soft text-primary"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground",
-              )}
-              title={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}
-            >
-              <KeyboardIcon className="size-4.5" />
-            </button>
-
-            {/* Restart */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRestart();
-              }}
-              className="p-2 rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-              title="ចាប់ផ្តើមឡើងវិញ"
-            >
-              <RotateCcw className="size-4.5" />
-            </button>
+            <Tip label={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowKeyboard(!showKeyboard);
+                }}
+                aria-label={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}
+                className={cn(
+                  "p-2 rounded-lg border transition-colors cursor-pointer",
+                  showKeyboard
+                    ? "border-primary/40 bg-primary-soft text-primary"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <KeyboardIcon className="size-4.5" />
+              </button>
+            </Tip>
           </div>
         </div>
       </header>
@@ -452,12 +614,36 @@ export function TypingPracticeScreen({
           <div className="flex items-center justify-between px-1 mb-2.5">
             <div className="flex items-center gap-2.5">
               <span className="text-sm text-muted-foreground km font-medium">គ្រាប់ចុច:</span>
-              <span className="font-bold text-primary text-base sm:text-lg font-khmer">
-                {nextChar === ZWSP ? "Space" : renderableCluster(nextChar)}
-              </span>
-              {nextHint && (
+              {nextChar === ZWSP ? (
+                <span className="inline-flex items-center gap-1.5 font-bold text-primary">
+                  <span className="km text-sm sm:text-base font-semibold">Space</span>
+                  <span className="km text-xs font-medium text-muted-foreground">(ZWSP)</span>
+                </span>
+              ) : nextChar === " " ? (
+                <span className="inline-flex items-center gap-1.5 font-bold text-primary">
+                  <span className="km text-sm sm:text-base font-semibold">Shift + Space</span>
+                  <span className="km text-xs font-medium text-muted-foreground">(ដកឃ្លា)</span>
+                </span>
+              ) : (
+                <span className="font-bold text-primary text-base sm:text-lg font-khmer">
+                  {renderableCluster(nextChar)}
+                </span>
+              )}
+              {nextHint && nextChar !== ZWSP && nextChar !== " " && (
                 <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
-                  {nextHint.shift ? `Shift + ${nextHint.code}` : nextHint.code}
+                  {nextHint.shift
+                    ? `Shift + ${KEY_LABELS[nextHint.code] ?? nextHint.code}`
+                    : (KEY_LABELS[nextHint.code] ?? nextHint.code)}
+                </span>
+              )}
+              {nextChar === ZWSP && (
+                <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
+                  Space
+                </span>
+              )}
+              {nextChar === " " && (
+                <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
+                  Shift + Space
                 </span>
               )}
             </div>
@@ -469,85 +655,88 @@ export function TypingPracticeScreen({
         )}
 
         {/* Typing Stage Box */}
-        <div
-          className={cn(
-            "relative card-elevated p-6 sm:p-8 min-h-[150px] sm:min-h-[180px] flex flex-col justify-center cursor-text transition-all",
-            !isInputFocused && "ring-2 ring-warning/60",
-          )}
-          onClick={focusInput}
-        >
+        <div className="flex flex-col gap-2">
           {/* Progress bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 overflow-hidden rounded-t-xl bg-secondary">
+          <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
             <div
-              className="h-full bg-primary transition-all duration-150"
+              className="h-full rounded-full bg-primary transition-all duration-150"
               style={{ width: `${stats.progress}%` }}
             />
           </div>
 
-          <input
-            ref={inputRef}
-            type="text"
-            value={typed}
-            onChange={(e) => handleChange(e.target.value)}
-            onFocus={() => setIsInputFocused(true)}
-            onBlur={() => setIsInputFocused(false)}
-            className="absolute opacity-0 pointer-events-none -top-1000 left-0"
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect="off"
-            autoComplete="off"
-            spellCheck="false"
-            aria-label="Khmer typing input"
-          />
-
-          {!isInputFocused && (
-            <div className="absolute inset-0 bg-background/70 backdrop-blur-xs rounded-xl flex items-center justify-center z-10">
-              <div className="inline-flex items-center gap-2.5 rounded-xl bg-card border border-warning/50 px-4 py-2 text-sm font-semibold text-foreground km">
-                <span className="size-2.5 rounded-full bg-warning animate-ping" />
-                <span>ចុចដើម្បីបន្តការវាយ</span>
-              </div>
-            </div>
-          )}
-
-          {/* Target Text */}
           <div
-            className={cn(
-              "km font-khmer leading-loose select-none break-words text-left transition-all",
-              fontSize === "normal" && "text-lg sm:text-xl",
-              fontSize === "large" && "text-2xl sm:text-3xl",
-              fontSize === "xlarge" && "text-3xl sm:text-4xl",
-            )}
+            className="relative card-elevated p-6 sm:p-8 min-h-[150px] sm:min-h-[180px] flex flex-col justify-center cursor-text transition-all"
+            onClick={focusInput}
           >
-            {Array.from(currentTargetLine).map((char, index) => {
-              const isTyped = index < typed.length;
-              const isCorrect = isTyped && typed[index] === char;
-              const isWrong = isTyped && typed[index] !== char;
-              const isCurrent = index === typed.length;
+            <input
+              ref={inputRef}
+              type="text"
+              value={typed}
+              onChange={(e) => handleChange(e.target.value)}
+              className="absolute opacity-0 pointer-events-none -top-1000 left-0"
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck="false"
+              aria-label="Khmer typing input"
+            />
 
-              let displayChar = char;
-              if (char === ZWSP) {
-                displayChar = "·";
-              } else if (isCombining(char) || char === COENG) {
-                displayChar = renderableCluster(char);
-              }
+            {/* Target Text — render by typographic cluster so vowels stay attached */}
+            <div
+              className={cn(
+                "km font-khmer leading-loose select-none break-words whitespace-pre-wrap text-left transition-all",
+                fontSize === "normal" && "text-lg sm:text-xl",
+                fontSize === "large" && "text-2xl sm:text-3xl",
+                fontSize === "xlarge" && "text-3xl sm:text-4xl",
+              )}
+            >
+              {targetClusters.map((cluster, index) => {
+                const start = targetOffsets[index] ?? 0;
+                const end = start + cluster.length;
+                const typedInCluster = typed.slice(start, Math.min(typed.length, end));
+                const expectedSoFar = cluster.slice(0, typedInCluster.length);
+                const fullyTyped = typed.length >= end;
+                const isCurrent = typed.length >= start && typed.length < end;
+                const isCorrect = fullyTyped && typed.slice(start, end) === cluster;
+                const isWrong = typedInCluster.length > 0 && typedInCluster !== expectedSoFar;
+                const isZwsp = cluster === ZWSP;
+                const isSpace = cluster === " " || isZwsp;
+                // Render ZWSP as a blank gap (same as normal space) — type with Space on Khmer IME
+                const displayChar = isSpace ? "\u00A0" : cluster;
 
-              return (
-                <span
-                  key={index}
-                  className={cn(
-                    "relative inline-block transition-colors rounded px-0.5",
-                    isCorrect && "text-success bg-success-soft/30 font-medium",
-                    isWrong && "text-destructive bg-destructive-soft line-through font-bold",
-                    isCurrent &&
-                      "bg-primary text-primary-foreground font-bold animate-pulse ring-2 ring-primary/40",
-                    !isTyped && !isCurrent && "text-foreground/80 opacity-90",
-                    char === ZWSP && "font-mono font-bold text-muted-foreground",
-                  )}
-                >
-                  {displayChar}
-                </span>
-              );
-            })}
+                const glyphClassName = cn(
+                  "relative inline transition-colors",
+                  // Keep a narrow natural gap — close to default word spacing
+                  isSpace && "inline-block min-w-[0.28em] text-center",
+                  isCorrect && "text-primary",
+                  isWrong && "text-destructive line-through",
+                  isCurrent &&
+                    wrongFlash &&
+                    "text-destructive after:absolute after:left-0 after:top-[0.15em] after:bottom-[0.1em] after:w-[2px] after:rounded-full after:bg-destructive",
+                  isCurrent &&
+                    !isWrong &&
+                    !wrongFlash &&
+                    "text-foreground after:absolute after:left-0 after:top-[0.15em] after:bottom-[0.1em] after:w-[2px] after:rounded-full after:bg-primary after:animate-pulse",
+                  !fullyTyped && !isCurrent && !isWrong && "text-foreground/70",
+                  isSpace && !isCorrect && !isWrong && "text-muted-foreground/50",
+                );
+
+                if (isZwsp) {
+                  return (
+                    <Tip key={`${start}-${index}`} label="Space (ZWSP)">
+                      <span className={glyphClassName}>{displayChar}</span>
+                    </Tip>
+                  );
+                }
+
+                return (
+                  <span key={`${start}-${index}`} className={glyphClassName}>
+                    {displayChar}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -560,14 +749,16 @@ export function TypingPracticeScreen({
       </main>
 
       {/* Completion Modal */}
-      {showResultsModal && (
+      {showResultsModal && lessonResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="card-elevated max-w-md w-full p-6 sm:p-7 bg-card border-border shadow-lg text-center animate-in zoom-in-95 duration-200">
             <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground mb-3.5">
               <Trophy className="size-7" />
             </div>
 
-            <h3 className="km text-2xl sm:text-3xl font-bold text-foreground">អបអរសាទរ!</h3>
+            <h3 className="km text-2xl sm:text-3xl font-bold text-foreground">
+              {lessonResult.timedOut ? "អស់ពេល!" : "អបអរសាទរ!"}
+            </h3>
             <p className="km text-sm sm:text-base text-muted-foreground mt-1.5">
               {level.badge} › {lesson.title}
             </p>
@@ -588,7 +779,7 @@ export function TypingPracticeScreen({
               <div>
                 <span className="km text-sm text-muted-foreground block font-medium">ល្បឿន</span>
                 <span className="font-mono text-xl sm:text-2xl font-bold text-primary">
-                  {Math.round(stats.wpm)} WPM
+                  {resultWpm} WPM
                 </span>
               </div>
               <div>
@@ -596,20 +787,21 @@ export function TypingPracticeScreen({
                   ភាពត្រឹមត្រូវ
                 </span>
                 <span className="font-mono text-xl sm:text-2xl font-bold text-success">
-                  {Math.round(stats.accuracy)}%
+                  {resultAccuracy}%
                 </span>
               </div>
               <div>
                 <span className="km text-sm text-muted-foreground block font-medium">កំហុស</span>
                 <span className="font-mono text-xl sm:text-2xl font-bold text-destructive">
-                  {stats.mistakes}
+                  {resultMistakes}
                 </span>
               </div>
             </div>
 
-            {previousRecord && (
+            {lessonResult.previousBest && (
               <p className="km text-sm text-muted-foreground mt-3.5 font-medium">
-                កំណត់ត្រាមុន: {previousRecord.bestWpm} WPM · {previousRecord.bestAccuracy}%
+                កំណត់ត្រាមុន: {lessonResult.previousBest.bestWpm} WPM ·{" "}
+                {lessonResult.previousBest.bestAccuracy}%
               </p>
             )}
 

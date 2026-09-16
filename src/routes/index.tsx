@@ -12,11 +12,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { progress, record } = useProgress();
+  const { progress, loaded, record } = useProgress();
 
   const [activeLevel, setActiveLevel] = useState<Level | null>(null);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
 
   // Sync with URL query parameters on initial mount
   useEffect(() => {
@@ -42,6 +43,8 @@ function Index() {
           } else {
             setActiveLesson(lvl.lessons[0] ?? null);
           }
+          // Deep link into a lesson → start with sidebar collapsed
+          setIsDesktopSidebarOpen(false);
         }
       }
     } catch {
@@ -70,6 +73,7 @@ function Index() {
   const handleSelectLesson = (lvl: Level, lsn: Lesson) => {
     setActiveLevel(lvl);
     setActiveLesson(lsn);
+    setIsDesktopSidebarOpen(false);
     updateUrl(lvl, lsn);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -77,8 +81,14 @@ function Index() {
   const handleGoHome = () => {
     setActiveLevel(null);
     setActiveLesson(null);
+    setIsDesktopSidebarOpen(true);
+    setIsMobileNavOpen(false);
     updateUrl(null, null);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleToggleDesktopSidebar = () => {
+    setIsDesktopSidebarOpen((prev) => !prev);
   };
 
   return (
@@ -90,6 +100,8 @@ function Index() {
         progress={progress}
         onSelectLesson={handleSelectLesson}
         onGoHome={handleGoHome}
+        isCollapsed={!isDesktopSidebarOpen}
+        onToggleCollapse={handleToggleDesktopSidebar}
         isMobileOpen={isMobileNavOpen}
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
@@ -124,10 +136,13 @@ function Index() {
             onRecordProgress={record}
             onSelectLesson={handleSelectLesson}
             onBackToOverview={handleGoHome}
-            onToggleSidebar={() => setIsMobileNavOpen(true)}
           />
         ) : (
-          <LearningPathView progress={progress} onSelectLesson={handleSelectLesson} />
+          <LearningPathView
+            progress={progress}
+            loaded={loaded}
+            onSelectLesson={handleSelectLesson}
+          />
         )}
       </div>
     </div>

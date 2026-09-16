@@ -1,15 +1,17 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { CURRICULUM, khmerNumber, type Level, type Lesson } from "@/data/curriculum";
 import { levelCompletion, type ProgressMap, lessonKey } from "@/lib/progress";
 import { cn } from "@/lib/utils";
+import { Tip } from "@/components/ui/tooltip";
 import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Timer,
   X,
   Keyboard,
-  GripVertical,
 } from "lucide-react";
 
 interface NavigationSidebarProps {
@@ -18,13 +20,14 @@ interface NavigationSidebarProps {
   progress: ProgressMap;
   onSelectLesson: (level: Level, lesson: Lesson) => void;
   onGoHome: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
 
-const MIN_SIDEBAR_WIDTH = 240;
-const MAX_SIDEBAR_WIDTH = 480;
-const DEFAULT_SIDEBAR_WIDTH = 300;
+const EXPANDED_WIDTH = 280;
+const COLLAPSED_WIDTH = 68;
 
 export function NavigationSidebar({
   currentLevelId,
@@ -32,29 +35,11 @@ export function NavigationSidebar({
   progress,
   onSelectLesson,
   onGoHome,
+  isCollapsed = false,
+  onToggleCollapse,
   isMobileOpen = false,
   onCloseMobile,
 }: NavigationSidebarProps) {
-  const [sidebarWidth, setSidebarWidth] = useState<number>(DEFAULT_SIDEBAR_WIDTH);
-
-  // Sync saved width after client hydration to prevent SSR mismatch
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("sidebar_width");
-      if (saved) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= MIN_SIDEBAR_WIDTH && parsed <= MAX_SIDEBAR_WIDTH) {
-          setSidebarWidth(parsed);
-        }
-      }
-    } catch {
-      // Ignore localStorage access errors
-    }
-  }, []);
-
-  const [isResizing, setIsResizing] = useState(false);
-  const isDraggingRef = useRef(false);
-
   const [expandedLevels, setExpandedLevels] = useState<Record<number, boolean>>(() => {
     return currentLevelId ? { [currentLevelId]: true } : { 1: true };
   });
@@ -66,61 +51,26 @@ export function NavigationSidebar({
     }));
   };
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    setIsResizing(true);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  }, []);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, e.clientX));
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false;
-        setIsResizing(false);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        setSidebarWidth((curr) => {
-          localStorage.setItem("sidebar_width", curr.toString());
-          return curr;
-        });
-      }
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, []);
-
   const sidebarContent = (
     <div className="flex h-full flex-col bg-card border-r border-border text-foreground select-none">
       {/* Header */}
       <div className="p-3.5 border-b border-border/80 bg-card/70 flex items-center justify-between gap-2">
-        <button
-          onClick={onGoHome}
-          className="flex items-center gap-2.5 text-left group transition-all duration-150 rounded-lg p-1 -m-1 hover:bg-secondary/60 cursor-pointer min-w-0"
-          title="ទៅកាន់ទំព័រដើម"
-        >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-200 group-hover:scale-105">
-            <Keyboard className="size-4.5" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-bold text-sm sm:text-base tracking-tight text-foreground truncate">
-              Khmer Type Master
+        <Tip label="ទៅកាន់ទំព័រដើម">
+          <button
+            onClick={onGoHome}
+            className="flex items-center gap-2.5 text-left group transition-all duration-150 rounded-lg p-1 -m-1 hover:bg-secondary/60 cursor-pointer min-w-0"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-200 group-hover:scale-105">
+              <Keyboard className="size-4.5" />
             </div>
-            <p className="km text-xs sm:text-sm text-muted-foreground truncate">រៀនវាយអក្សរខ្មែរ</p>
-          </div>
-        </button>
+            <div className="min-w-0">
+              <div className="font-bold text-sm sm:text-base tracking-tight text-foreground truncate">
+                Khmer Type Master
+              </div>
+              <p className="km text-xs sm:text-sm text-muted-foreground truncate">រៀនវាយអក្សរខ្មែរឱ្យជំនាញ</p>
+            </div>
+          </button>
+        </Tip>
 
         {onCloseMobile && (
           <button
@@ -133,7 +83,7 @@ export function NavigationSidebar({
         )}
       </div>
 
-      {/* Levels list with refined minimalist buttons */}
+      {/* Levels list */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2 scrollbar-slim">
         {CURRICULUM.map((level) => {
           const lessonIds = level.lessons.map((l) => l.id);
@@ -153,7 +103,6 @@ export function NavigationSidebar({
                     : "border-transparent bg-transparent hover:bg-secondary/40 hover:border-border/50",
               )}
             >
-              {/* Level Header / Dropdown Toggle Button */}
               <button
                 onClick={() => toggleLevel(level.id)}
                 className={cn(
@@ -208,7 +157,6 @@ export function NavigationSidebar({
                 </div>
               </button>
 
-              {/* Sub-lessons list with clean animated accordion transition */}
               <div
                 className={cn(
                   "grid transition-all duration-200 ease-in-out overflow-hidden",
@@ -254,7 +202,6 @@ export function NavigationSidebar({
                             </span>
                           </div>
 
-                          {/* Stat indicators */}
                           <div className="shrink-0 flex items-center gap-1.5 text-xs">
                             {lesson.mode === "exam" && (
                               <span
@@ -291,7 +238,7 @@ export function NavigationSidebar({
         })}
       </div>
 
-      {/* Footer link to home */}
+      {/* Footer */}
       <div className="p-3 border-t border-border/80 bg-card/60">
         <button
           onClick={onGoHome}
@@ -304,33 +251,102 @@ export function NavigationSidebar({
     </div>
   );
 
+  const collapsedRail = (
+    <div className="flex h-full w-full flex-col items-center bg-card border-r border-border text-foreground select-none py-3 gap-3">
+      <Tip label="ទៅកាន់ទំព័រដើម" side="right">
+        <button
+          onClick={onGoHome}
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform duration-150 hover:scale-105 cursor-pointer"
+          aria-label="ទំព័រដើម"
+        >
+          <Keyboard className="size-4.5" />
+        </button>
+      </Tip>
+
+      <div className="w-8 h-px bg-border/80" />
+
+      <div className="flex-1 overflow-y-auto w-full px-1.5 space-y-1.5 scrollbar-slim flex flex-col items-center">
+        {CURRICULUM.map((level) => {
+          const lessonIds = level.lessons.map((l) => l.id);
+          const comp = levelCompletion(progress, level.id, lessonIds);
+          const isCurrentLevel = currentLevelId === level.id;
+          const firstLesson = level.lessons[0];
+
+          return (
+            <Tip key={level.id} label={`${level.badge} — ${level.title}`} side="right">
+              <button
+                onClick={() => {
+                  if (firstLesson) onSelectLesson(level, firstLesson);
+                }}
+                className={cn(
+                  "km relative flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold transition-all duration-150 cursor-pointer",
+                  isCurrentLevel
+                    ? "bg-primary text-primary-foreground shadow-sm scale-105"
+                    : comp === 100
+                      ? "bg-success/15 text-success border border-success/30 hover:bg-success/25"
+                      : "bg-secondary text-foreground/80 border border-border/60 hover:bg-secondary/80 hover:border-border",
+                )}
+              >
+                {comp === 100 ? <CheckCircle2 className="size-4" /> : khmerNumber(level.id)}
+                {isCurrentLevel && (
+                  <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary ring-2 ring-card" />
+                )}
+              </button>
+            </Tip>
+          );
+        })}
+      </div>
+
+      <Tip label="ទំព័រដើម" side="right">
+        <button
+          onClick={onGoHome}
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+          aria-label="ទំព័រដើម"
+        >
+          <BookOpen className="size-4" />
+        </button>
+      </Tip>
+    </div>
+  );
+
   return (
     <>
-      {/* Desktop Resizable Sidebar */}
+      {/* Desktop Sidebar */}
       <aside
-        style={{ width: `${sidebarWidth}px` }}
-        className="hidden lg:flex shrink-0 h-screen sticky top-0 z-20 flex-col relative group/sidebar"
+        style={{ width: isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
+        className="hidden lg:flex shrink-0 h-screen sticky top-0 z-20 flex-col relative transition-[width] duration-300 ease-out"
       >
-        {sidebarContent}
-
-        {/* Vertical Resize Drag Handle */}
-        <div
-          onMouseDown={handleMouseDown}
-          className={cn(
-            "absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-30 transition-colors duration-150 group/handle flex items-center justify-center",
-            isResizing ? "bg-primary w-2" : "hover:bg-primary/50 bg-transparent",
-          )}
-          title="អូសដើម្បីពង្រីក/បង្រួមក្ដារម៉ឺនុយ (Drag to resize)"
-        >
-          <div
-            className={cn(
-              "absolute right-[-3px] top-1/2 -translate-y-1/2 rounded-full py-2 px-0.5 bg-border text-muted-foreground transition-opacity duration-150 shadow-xs pointer-events-none opacity-0 group-hover/handle:opacity-100",
-              isResizing && "opacity-100 bg-primary text-primary-foreground",
-            )}
-          >
-            <GripVertical className="size-3" />
-          </div>
+        <div className="h-full w-full overflow-hidden">
+          {isCollapsed ? collapsedRail : sidebarContent}
         </div>
+
+        {/* Cute collapse / expand pill */}
+        {onToggleCollapse && (
+          <Tip
+            label={isCollapsed ? "ពង្រីកម៉ឺនុយ" : "បង្រួមម៉ឺនុយ"}
+            side="right"
+          >
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 -right-3 z-40",
+                "flex size-6 items-center justify-center rounded-full",
+                "border border-border bg-card text-muted-foreground shadow-sm",
+                "hover:bg-primary hover:text-primary-foreground hover:border-primary hover:shadow-md",
+                "transition-all duration-200 cursor-pointer",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              )}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isCollapsed ? (
+                <ChevronRight className="size-3.5" />
+              ) : (
+                <ChevronLeft className="size-3.5" />
+              )}
+            </button>
+          </Tip>
+        )}
       </aside>
 
       {/* Mobile Drawer */}

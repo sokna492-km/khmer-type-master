@@ -1,14 +1,20 @@
 import { CURRICULUM, khmerNumber, type Level, type Lesson } from "@/data/curriculum";
 import { type ProgressMap, lessonKey } from "@/lib/progress";
 import { KhmerKeyboard } from "@/components/KhmerKeyboard";
+import { cn } from "@/lib/utils";
 import { CheckCircle2, Play, Trophy, Zap, Award, Keyboard as KeyboardIcon } from "lucide-react";
 
 interface LearningPathViewProps {
   progress: ProgressMap;
+  loaded?: boolean;
   onSelectLesson: (level: Level, lesson: Lesson) => void;
 }
 
-export function LearningPathView({ progress, onSelectLesson }: LearningPathViewProps) {
+export function LearningPathView({
+  progress,
+  loaded = true,
+  onSelectLesson,
+}: LearningPathViewProps) {
   // Compute stats across all lessons
   let totalLessons = 0;
   let completedLessons = 0;
@@ -58,72 +64,79 @@ export function LearningPathView({ progress, onSelectLesson }: LearningPathViewP
                     onClick={() =>
                       onSelectLesson(nextLessonToLearn!.level, nextLessonToLearn!.lesson)
                     }
-                    className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-5 py-2.5 text-lg font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all cursor-pointer"
                   >
-                    <Play className="size-4 fill-current" />
-                    <span className="km">
-                      {completedLessons === 0 ? "ចាប់ផ្តើមរៀន" : "បន្តការរៀន"}
+                    <Play className="size-4.5 fill-current" />
+                    <span className="km text-lg sm:text-xl font-bold">
+                      {completedLessons === 0 ? "ចាប់ផ្ដើម" : "បន្តការរៀន"}
                     </span>
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 gap-3 w-full md:w-auto min-w-[280px]">
+            {/* Quick Stats Grid — averages of each completed lesson's best scores */}
+            <div
+              className={cn(
+                "grid grid-cols-2 gap-3 w-full md:w-auto min-w-[280px] transition-opacity",
+                !loaded && "opacity-50",
+              )}
+            >
               <div className="card-elevated p-3.5">
-                <div className="flex items-center justify-between text-muted-foreground text-sm">
-                  <span className="km font-medium">វឌ្ឍនភាព</span>
-                  <Trophy className="size-4 text-warning" />
+                <div className="flex items-center justify-between text-muted-foreground text-base">
+                  <span className="km font-bold">វឌ្ឍនភាព</span>
+                  <Trophy className="size-4.5 text-warning" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-2xl sm:text-3xl font-extrabold font-mono text-primary">
-                    {khmerNumber(overallPercent)}%
+                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-primary">
+                    {loaded ? `${khmerNumber(overallPercent)}%` : "—"}
                   </span>
                 </div>
                 <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                   <div
                     className="h-full bg-primary rounded-full transition-all duration-300"
-                    style={{ width: `${overallPercent}%` }}
+                    style={{ width: `${loaded ? overallPercent : 0}%` }}
                   />
                 </div>
               </div>
 
               <div className="card-elevated p-3.5">
-                <div className="flex items-center justify-between text-muted-foreground text-sm">
-                  <span className="km font-medium">ល្បឿន</span>
-                  <Zap className="size-4 text-primary" />
+                <div className="flex items-center justify-between text-muted-foreground text-base">
+                  <span className="km font-bold">មធ្យម WPM</span>
+                  <Zap className="size-4.5 text-primary" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-extrabold font-mono text-foreground">
-                    {khmerNumber(avgWpm)}
+                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-foreground">
+                    {loaded ? khmerNumber(avgWpm) : "—"}
                   </span>
-                  <span className="text-sm text-muted-foreground font-mono font-medium">WPM</span>
+                  <span className="text-base text-muted-foreground font-mono font-bold">WPM</span>
                 </div>
+                <p className="km mt-1 text-xs text-muted-foreground">មធ្យមពិន្ទុល្អបំផុត</p>
               </div>
 
               <div className="card-elevated p-3.5">
-                <div className="flex items-center justify-between text-muted-foreground text-sm">
-                  <span className="km font-medium">ភាពត្រឹមត្រូវ</span>
-                  <Award className="size-4 text-success" />
+                <div className="flex items-center justify-between text-muted-foreground text-base">
+                  <span className="km font-bold">មធ្យមត្រឹមត្រូវ</span>
+                  <Award className="size-4.5 text-success" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-2xl sm:text-3xl font-extrabold font-mono text-success">
-                    {khmerNumber(avgAccuracy)}%
+                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-success">
+                    {loaded ? `${khmerNumber(avgAccuracy)}%` : "—"}
                   </span>
                 </div>
+                <p className="km mt-1 text-xs text-muted-foreground">មធ្យមពិន្ទុល្អបំផុត</p>
               </div>
 
               <div className="card-elevated p-3.5">
-                <div className="flex items-center justify-between text-muted-foreground text-sm">
-                  <span className="km font-medium">បានបញ្ចប់</span>
-                  <CheckCircle2 className="size-4 text-primary" />
+                <div className="flex items-center justify-between text-muted-foreground text-base">
+                  <span className="km font-bold">បានបញ្ចប់</span>
+                  <CheckCircle2 className="size-4.5 text-primary" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-extrabold font-mono text-foreground">
-                    {khmerNumber(completedLessons)}
+                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-foreground">
+                    {loaded ? khmerNumber(completedLessons) : "—"}
                   </span>
-                  <span className="text-sm text-muted-foreground font-medium">
+                  <span className="text-base text-muted-foreground font-bold">
                     / {khmerNumber(totalLessons)}
                   </span>
                 </div>
@@ -133,21 +146,13 @@ export function LearningPathView({ progress, onSelectLesson }: LearningPathViewP
         </div>
       </section>
 
-      {/* Main Home Page Content (Clean, educational, zero button clutter) */}
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 pt-8">
-        {/* Keyboard Overview Section */}
-        <div className="rounded-2xl border border-border bg-card p-6 sm:p-7 mb-8">
-          <div className="flex items-center gap-2.5 mb-4">
-            <KeyboardIcon className="size-5.5 text-primary" />
-            <h3 className="text-lg sm:text-xl font-bold text-foreground km">ក្ដារចុចយូនីកូដ</h3>
-          </div>
-
-          <div className="overflow-x-auto pb-2">
-            <div className="min-w-[650px]">
-              <KhmerKeyboard />
-            </div>
-          </div>
+      {/* Keyboard sits directly on the page background */}
+      <main className="mx-auto w-full max-w-6xl px-3 sm:px-5 pt-6 sm:pt-8 pb-10">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <KeyboardIcon className="size-5 text-primary" />
+          <h3 className="text-lg sm:text-xl font-bold text-foreground km">ក្ដារចុចយូនីកូដ</h3>
         </div>
+        <KhmerKeyboard />
       </main>
     </div>
   );

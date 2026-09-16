@@ -75,7 +75,8 @@ export const KEY_ROWS: KeyDef[][] = [
     { code: ".", normal: ".", shift: "៚" },
     { code: "/", normal: "៍", shift: "?" },
   ],
-  [{ code: "space", normal: " ", shift: ZWSP, wide: 8, label: "Space" }],
+  // Windows Khmer / NiDA: Space → ZWSP, Shift+Space → visible space (verified via runtime IME logs)
+  [{ code: "space", normal: ZWSP, shift: " ", wide: 8, label: "Space" }],
 ];
 
 export type KeyHint = { code: string; shift: boolean; altGr: boolean };
