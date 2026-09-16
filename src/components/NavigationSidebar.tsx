@@ -111,14 +111,14 @@ export function NavigationSidebar({
           className="flex items-center gap-2.5 text-left group transition-all duration-150 rounded-lg p-1 -m-1 hover:bg-secondary/60 cursor-pointer min-w-0"
           title="ទៅកាន់ទំព័រដើម"
         >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-200 group-hover:scale-105">
-            <Keyboard className="size-4" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-200 group-hover:scale-105">
+            <Keyboard className="size-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="font-bold text-sm tracking-tight text-foreground truncate">
+            <div className="font-bold text-sm sm:text-base tracking-tight text-foreground truncate">
               Khmer Type Master
             </div>
-            <p className="km text-xs text-muted-foreground truncate">រៀនវាយអក្សរខ្មែរ</p>
+            <p className="km text-xs sm:text-sm text-muted-foreground truncate">រៀនវាយអក្សរខ្មែរ</p>
           </div>
         </button>
 
@@ -128,13 +128,13 @@ export function NavigationSidebar({
             className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary lg:hidden cursor-pointer"
             aria-label="បិទម៉ឺនុយ"
           >
-            <X className="size-4.5" />
+            <X className="size-5" />
           </button>
         )}
       </div>
 
       {/* Levels list with refined minimalist buttons */}
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-slim">
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2 scrollbar-slim">
         {CURRICULUM.map((level) => {
           const lessonIds = level.lessons.map((l) => l.id);
           const comp = levelCompletion(progress, level.id, lessonIds);
@@ -157,14 +157,14 @@ export function NavigationSidebar({
               <button
                 onClick={() => toggleLevel(level.id)}
                 className={cn(
-                  "w-full flex items-center justify-between p-2 text-left transition-colors duration-150 rounded-lg group cursor-pointer",
+                  "w-full flex items-center justify-between p-2.5 text-left transition-colors duration-150 rounded-lg group cursor-pointer",
                   isExpanded ? "bg-secondary/30" : "hover:bg-secondary/50",
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0 pr-1.5">
                   <span
                     className={cn(
-                      "km shrink-0 flex items-center justify-center size-7 rounded-lg text-xs font-bold transition-transform duration-200 group-hover:scale-105",
+                      "km shrink-0 flex items-center justify-center size-8 rounded-lg text-sm font-bold transition-transform duration-200 group-hover:scale-105",
                       comp === 100
                         ? "bg-success/15 text-success border border-success/30"
                         : isCurrentLevel
@@ -172,17 +172,17 @@ export function NavigationSidebar({
                           : "bg-secondary text-foreground/80 border border-border/60",
                     )}
                   >
-                    {comp === 100 ? <CheckCircle2 className="size-4" /> : khmerNumber(level.id)}
+                    {comp === 100 ? <CheckCircle2 className="size-4.5" /> : khmerNumber(level.id)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="km text-xs font-semibold text-foreground truncate">
+                      <span className="km text-sm font-semibold text-foreground truncate">
                         {level.badge}
                       </span>
                       {comp > 0 && (
                         <span
                           className={cn(
-                            "text-[10px] rounded px-1.5 py-0.2 font-mono font-semibold transition-colors",
+                            "text-xs rounded px-1.5 py-0.5 font-mono font-semibold transition-colors",
                             comp === 100
                               ? "bg-success/15 text-success"
                               : "bg-primary/10 text-primary",
@@ -192,16 +192,16 @@ export function NavigationSidebar({
                         </span>
                       )}
                     </div>
-                    <p className="km text-xs text-muted-foreground truncate leading-tight mt-0.5">
+                    <p className="km text-xs sm:text-sm text-muted-foreground truncate leading-normal mt-0.5">
                       {level.title}
                     </p>
                   </div>
                 </div>
 
-                <div className="shrink-0 p-0.5 text-muted-foreground transition-transform duration-200">
+                <div className="shrink-0 p-1 text-muted-foreground transition-transform duration-200">
                   <ChevronDown
                     className={cn(
-                      "size-4 transition-transform duration-200 text-muted-foreground/70 group-hover:text-foreground",
+                      "size-4.5 transition-transform duration-200 text-muted-foreground/70 group-hover:text-foreground",
                       isExpanded ? "rotate-0" : "-rotate-90",
                     )}
                   />
@@ -216,7 +216,7 @@ export function NavigationSidebar({
                 )}
               >
                 <div className="min-h-0">
-                  <div className="border-t border-border/40 px-1.5 py-1.5 space-y-0.5 bg-background/50">
+                  <div className="border-t border-border/40 px-1.5 py-1.5 space-y-1 bg-background/50">
                     {level.lessons.map((lesson, idx) => {
                       const rec = progress[lessonKey(level.id, lesson.id)];
                       const isCompleted = rec?.completed ?? false;
@@ -230,7 +230,7 @@ export function NavigationSidebar({
                             if (onCloseMobile) onCloseMobile();
                           }}
                           className={cn(
-                            "w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors duration-150 cursor-pointer group",
+                            "w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-left transition-colors duration-150 cursor-pointer group",
                             isCurrentLesson
                               ? "bg-primary text-primary-foreground font-medium"
                               : isCompleted
@@ -238,10 +238,10 @@ export function NavigationSidebar({
                                 : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
                           )}
                         >
-                          <div className="flex items-center gap-2 min-w-0 pr-1.5">
+                          <div className="flex items-center gap-2.5 min-w-0 pr-1.5">
                             <span
                               className={cn(
-                                "size-1.5 rounded-full shrink-0 transition-transform duration-150",
+                                "size-2 rounded-full shrink-0 transition-transform duration-150",
                                 isCurrentLesson
                                   ? "bg-primary-foreground scale-125"
                                   : isCompleted
@@ -249,30 +249,30 @@ export function NavigationSidebar({
                                     : "bg-muted-foreground/30 group-hover:bg-muted-foreground/60",
                               )}
                             />
-                            <span className="km truncate text-xs">
+                            <span className="km truncate text-sm">
                               {khmerNumber(idx + 1)}. {lesson.title}
                             </span>
                           </div>
 
                           {/* Stat indicators */}
-                          <div className="shrink-0 flex items-center gap-1 text-xs">
+                          <div className="shrink-0 flex items-center gap-1.5 text-xs">
                             {lesson.mode === "exam" && (
                               <span
                                 className={cn(
-                                  "flex items-center gap-0.5 rounded px-1 py-0.2 text-[10px] font-mono",
+                                  "flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-mono",
                                   isCurrentLesson
                                     ? "bg-white/20 text-white"
                                     : "bg-destructive/10 text-destructive",
                                 )}
                               >
-                                <Timer className="size-2.5" />
+                                <Timer className="size-3" />
                                 {lesson.timeLimit}s
                               </span>
                             )}
                             {isCompleted && rec && (
                               <span
                                 className={cn(
-                                  "font-mono font-medium text-[11px]",
+                                  "font-mono font-medium text-xs sm:text-sm",
                                   isCurrentLesson ? "text-primary-foreground/90" : "text-success",
                                 )}
                               >
@@ -292,12 +292,12 @@ export function NavigationSidebar({
       </div>
 
       {/* Footer link to home */}
-      <div className="p-2.5 border-t border-border/80 bg-card/60">
+      <div className="p-3 border-t border-border/80 bg-card/60">
         <button
           onClick={onGoHome}
-          className="w-full flex items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 py-2 text-xs font-medium km text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150 cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 py-2.5 text-sm font-medium km text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150 cursor-pointer"
         >
-          <BookOpen className="size-3.5" />
+          <BookOpen className="size-4" />
           <span>ទំព័រដើម</span>
         </button>
       </div>
