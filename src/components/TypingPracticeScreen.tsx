@@ -1,10 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Level, Lesson } from "@/data/curriculum";
 import { type ProgressMap, lessonKey } from "@/lib/progress";
-import { renderableCluster, ZWSP, splitClusters, clusterOffsets } from "@/lib/khmer";
+import { renderableCluster, ZWSP, clusterOffsets } from "@/lib/khmer";
 import { keyHintFor, KEY_LABELS } from "@/lib/keymap";
 import { KhmerKeyboard } from "@/components/KhmerKeyboard";
-import { playKeySound, isSoundEnabled, setSoundEnabled } from "@/lib/sound";
+import { TypingCaret } from "@/components/TypingCaret";
+import {
+  playKeySound,
+  playRoundCompleteSound,
+  playLessonCompleteSound,
+  preloadTypingSounds,
+  isSoundEnabled,
+  setSoundEnabled,
+} from "@/lib/sound";
+import { useTypingSession } from "@/hooks/useTypingSession";
+import { useLessonStats } from "@/hooks/useLessonStats";
+import { useCompositionInput } from "@/hooks/useCompositionInput";
 import { cn } from "@/lib/utils";
 import { Tip } from "@/components/ui/tooltip";
 import {
@@ -46,7 +57,7 @@ export function TypingPracticeScreen({
   const [soundOn, setSoundOn] = useState(true);
   const [fontSize, setFontSize] = useState<"normal" | "large" | "xlarge">("large");
   const [showResultsModal, setShowResultsModal] = useState(false);
-  const [wrongFlash, setWrongFlash] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const [lessonResult, setLessonResult] = useState<{
     wpm: number;
     accuracy: number;
@@ -57,133 +68,125 @@ export function TypingPracticeScreen({
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
+    preloadTypingSounds();
   }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const roundResults = useRef<Array<{ correctChars: number; mistakes: number; elapsed: number }>>(
-    [],
-  );
+  const promptRef = useRef<HTMLDivElement>(null);
   const recordedRef = useRef(false);
-  const typedRef = useRef("");
-  const mistakesRef = useRef(0);
-  const elapsedRef = useRef(0);
   const linePushedRef = useRef(false);
-  const lineStartedElapsedRef = useRef(0);
-  const lessonCorrectRef = useRef(0);
-  const wrongFlashTimerRef = useRef<number | null>(null);
+
+  const syncInputFocus = useCallback(() => {
+    setInputFocused(document.activeElement === inputRef.current);
+  }, []);
+
+  useEffect(() => {
+    const onFocusIn = () => syncInputFocus();
+    const onFocusOut = () => {
+      // Wait for the next focused element so we don't flicker during re-focus.
+      requestAnimationFrame(syncInputFocus);
+    };
+    const onWindowBlur = () => setInputFocused(false);
+
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    window.addEventListener("blur", onWindowBlur);
+    syncInputFocus();
+
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+      window.removeEventListener("blur", onWindowBlur);
+    };
+  }, [syncInputFocus]);
 
   const currentTargetLine = lesson.lines[lineIndex] ?? lesson.lines[0] ?? "";
   const isLastLine = lineIndex >= lesson.lines.length - 1;
   const isTimedLesson = Boolean(lesson.timeLimit);
 
-  const [typed, setTyped] = useState("");
-  const [mistakes, setMistakes] = useState(0);
-  const [startTime, setStartTime] = useState<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [lessonFinished, setLessonFinished] = useState(false);
+  const lessonStats = useLessonStats({
+    ...(isTimedLesson && lesson.timeLimit ? { timeLimit: lesson.timeLimit } : {}),
+  });
 
-  const timerRef = useRef<number | null>(null);
+  const session = useTypingSession({
+    target: currentTargetLine,
+    mode: "strict",
+  });
 
-  typedRef.current = typed;
-  mistakesRef.current = mistakes;
-  elapsedRef.current = elapsedSeconds;
+  const {
+    typed,
+    completed: lineCompleted,
+    stats: lineStats,
+    targetClusters,
+    caretClusterIndex,
+    nextHintUnit: hintUnit,
+    wrongFlash,
+    handleCommit,
+    handleBackspace,
+    setCompositionText,
+    clearComposition,
+    reset: resetSession,
+    finish: finishSession,
+    target: sanitizedTarget,
+  } = session;
 
-  const clearRoundTimer = useCallback(() => {
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
+  const {
+    stats: displayStats,
+    noteActivity,
+    addMistakes,
+    setLiveLineCorrect,
+    commitLine,
+    finish: finishLessonStats,
+    reset: resetLessonStats,
+    started: lessonStarted,
+    snapshot,
+  } = lessonStats;
 
-  const resetLineState = useCallback(() => {
-    setTyped("");
-    setMistakes(0);
-    setIsCompleted(false);
-    setWrongFlash(false);
+  // Keep lesson live correct in sync with the active line
+  useEffect(() => {
+    if (linePushedRef.current) return;
+    setLiveLineCorrect(lineStats.correct);
+  }, [lineStats.correct, setLiveLineCorrect]);
+
+  const clearRoundFlags = useCallback(() => {
     linePushedRef.current = false;
   }, []);
 
-  const resetTimer = useCallback(() => {
-    setStartTime(null);
-    setElapsedSeconds(0);
-    clearRoundTimer();
-  }, [clearRoundTimer]);
-
   useEffect(() => {
     setLineIndex(0);
-    roundResults.current = [];
     recordedRef.current = false;
-    lessonCorrectRef.current = 0;
-    lineStartedElapsedRef.current = 0;
     setShowResultsModal(false);
     setLessonResult(null);
-    setLessonFinished(false);
-    resetLineState();
-    resetTimer();
-  }, [lesson.id, resetLineState, resetTimer]);
+    clearRoundFlags();
+    resetLessonStats();
+    resetSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset lesson shell only
+  }, [lesson.id]);
 
+  // Clear the push guard only after the session has actually reset.
+  // Clearing on lineIndex alone races: completed stays true for one render while
+  // the guard is false, so handleLineComplete (and round sound) fire twice.
   useEffect(() => {
-    resetLineState();
-    lineStartedElapsedRef.current = isTimedLesson ? elapsedRef.current : 0;
-    // Untimed lessons: each line has its own timer. Timed exams keep one clock.
-    if (!isTimedLesson) {
-      resetTimer();
+    if (!lineCompleted) {
+      linePushedRef.current = false;
     }
-  }, [lineIndex, isTimedLesson, resetLineState, resetTimer]);
-
-  const computeFromTotals = useCallback(
-    (correctChars: number, mistakeCount: number, elapsed: number) => {
-      const effectiveSecs = Math.max(elapsed, 0.5);
-      const minutes = effectiveSecs / 60;
-      const wpm = Math.round(correctChars / minutes / 5);
-      const totalKeypresses = correctChars + mistakeCount;
-      const accuracy =
-        totalKeypresses > 0
-          ? Math.max(0, Math.min(100, Math.round((correctChars / totalKeypresses) * 100)))
-          : 100;
-      return { wpm, accuracy, mistakes: mistakeCount };
-    },
-    [],
-  );
+  }, [lineCompleted]);
 
   const finalizeLesson = useCallback(
     (opts?: { timedOut?: boolean; includeCurrentLine?: boolean }) => {
       if (recordedRef.current) return;
       recordedRef.current = true;
 
-      clearRoundTimer();
-      setIsCompleted(true);
-      setLessonFinished(true);
+      const now = Date.now();
+      finishSession();
 
       if (opts?.includeCurrentLine && !linePushedRef.current) {
-        const lineElapsed = Math.max(
-          elapsedRef.current - lineStartedElapsedRef.current,
-          typedRef.current.length > 0 || mistakesRef.current > 0 ? 0.5 : 0,
-        );
-        roundResults.current.push({
-          correctChars: typedRef.current.length,
-          mistakes: mistakesRef.current,
-          elapsed: lineElapsed,
-        });
+        commitLine(lineStats.correct);
         linePushedRef.current = true;
       }
 
-      const allRounds = roundResults.current;
-      const totalCorrect = allRounds.reduce((acc, r) => acc + r.correctChars, 0);
-      const totalMistakes = allRounds.reduce((acc, r) => acc + r.mistakes, 0);
-      const totalElapsed = isTimedLesson
-        ? Math.max(elapsedRef.current, 0.5)
-        : Math.max(
-            allRounds.reduce((acc, r) => acc + r.elapsed, 0),
-            0.5,
-          );
-
-      const { wpm: finalWpm, accuracy: finalAccuracy } = computeFromTotals(
-        totalCorrect,
-        totalMistakes,
-        totalElapsed,
-      );
+      finishLessonStats(now);
+      const final = snapshot({ now });
 
       const key = lessonKey(level.id, lesson.id);
       const previousBest = progress[key]
@@ -191,16 +194,18 @@ export function TypingPracticeScreen({
         : null;
 
       setLessonResult({
-        wpm: finalWpm,
-        accuracy: finalAccuracy,
-        mistakes: totalMistakes,
+        wpm: final.wpmRounded,
+        accuracy: final.accuracyRounded,
+        mistakes: final.mistakes,
         previousBest,
         timedOut: Boolean(opts?.timedOut),
       });
 
+      playLessonCompleteSound();
+
       onRecordProgress(level.id, lesson.id, {
-        wpm: finalWpm,
-        accuracy: finalAccuracy,
+        wpm: final.wpmRounded,
+        accuracy: final.accuracyRounded,
       });
 
       window.setTimeout(() => {
@@ -208,186 +213,100 @@ export function TypingPracticeScreen({
       }, 400);
     },
     [
-      clearRoundTimer,
-      computeFromTotals,
-      isTimedLesson,
+      commitLine,
+      finishLessonStats,
+      finishSession,
       level.id,
       lesson.id,
+      lineStats.correct,
       onRecordProgress,
       progress,
+      snapshot,
     ],
   );
 
+  // Timed exam auto-finish from lesson-scoped clock
   useEffect(() => {
-    if (!startTime || lessonFinished) return;
-    if (!isTimedLesson && isCompleted) return;
-
-    timerRef.current = window.setInterval(() => {
-      const now = Date.now();
-      const secs = (now - startTime) / 1000;
-      setElapsedSeconds(secs);
-
-      if (lesson.timeLimit && secs >= lesson.timeLimit) {
-        clearRoundTimer();
-        finalizeLesson({ timedOut: true, includeCurrentLine: true });
-      }
-    }, 200);
-
-    return () => {
-      clearRoundTimer();
-    };
+    if (!isTimedLesson || !lesson.timeLimit || recordedRef.current) return;
+    if (lessonStarted && displayStats.remaining !== null && displayStats.remaining <= 0) {
+      finalizeLesson({ timedOut: true, includeCurrentLine: true });
+    }
   }, [
-    startTime,
-    isCompleted,
-    lessonFinished,
     isTimedLesson,
     lesson.timeLimit,
-    clearRoundTimer,
+    lessonStarted,
+    displayStats.remaining,
     finalizeLesson,
   ]);
 
-  const focusInput = useCallback(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
+  const handleLineComplete = useCallback(() => {
+    if (linePushedRef.current) return;
+    linePushedRef.current = true;
+
+    commitLine(lineStats.correct);
+
+    if (!isLastLine) {
+      playRoundCompleteSound();
+      window.setTimeout(() => {
+        setLineIndex((prev) => prev + 1);
+      }, 400);
+    } else {
+      finalizeLesson({ timedOut: false, includeCurrentLine: false });
     }
-  }, []);
+  }, [commitLine, finalizeLesson, isLastLine, lineStats.correct]);
 
   useEffect(() => {
-    focusInput();
-  }, [focusInput, lineIndex]);
-
-  const flashWrong = useCallback(() => {
-    setWrongFlash(true);
-    if (wrongFlashTimerRef.current) {
-      window.clearTimeout(wrongFlashTimerRef.current);
+    if (lineCompleted && !recordedRef.current && !linePushedRef.current) {
+      handleLineComplete();
     }
-    wrongFlashTimerRef.current = window.setTimeout(() => {
-      setWrongFlash(false);
-      wrongFlashTimerRef.current = null;
-    }, 160);
-  }, []);
+  }, [lineCompleted, handleLineComplete]);
 
-  const handleLineComplete = useCallback(
-    (finalTyped: string, lineMistakes: number) => {
-      if (linePushedRef.current) return;
-      linePushedRef.current = true;
-      setIsCompleted(true);
-
-      if (!isTimedLesson) {
-        clearRoundTimer();
+  const onCommit = useCallback(
+    (nextValue: string) => {
+      const prevLen = typed.length;
+      const result = handleCommit(nextValue);
+      noteActivity();
+      if (result.mistakesAdded > 0) {
+        addMistakes(result.mistakesAdded);
       }
-
-      const lineElapsed = isTimedLesson
-        ? Math.max(elapsedRef.current - lineStartedElapsedRef.current, 0.5)
-        : Math.max(elapsedRef.current, 0.5);
-
-      roundResults.current.push({
-        correctChars: finalTyped.length,
-        mistakes: lineMistakes,
-        elapsed: lineElapsed,
-      });
-      lessonCorrectRef.current += finalTyped.length;
-
-      if (!isLastLine) {
-        window.setTimeout(() => {
-          setLineIndex((prev) => prev + 1);
-        }, 400);
-      } else {
-        finalizeLesson({ timedOut: false, includeCurrentLine: false });
+      if (!result.accepted) {
+        playKeySound(true);
+      } else if (result.value.length > prevLen) {
+        playKeySound(false);
       }
+      return result;
     },
-    [clearRoundTimer, finalizeLesson, isLastLine, isTimedLesson],
+    [addMistakes, handleCommit, noteActivity, typed.length],
   );
 
-  const currentTargetChar = currentTargetLine[typed.length] ?? "";
+  const onBackspace = useCallback(() => {
+    noteActivity();
+    return handleBackspace();
+  }, [handleBackspace, noteActivity]);
 
-  const handleChange = (nextValue: string) => {
-    if (isCompleted || lessonFinished) return;
+  const composition = useCompositionInput({
+    inputRef,
+    committed: typed,
+    completed: lineCompleted || Boolean(lessonResult),
+    onCommit,
+    onBackspace,
+    onCompositionChange: setCompositionText,
+    onClearComposition: clearComposition,
+  });
 
-    if (!startTime && nextValue.length > 0) {
-      setStartTime(Date.now());
-    }
-
-    // Backspace — allow deleting correct progress
-    if (nextValue.length < typed.length) {
-      setTyped(nextValue);
-      return;
-    }
-
-    if (nextValue.length === typed.length) return;
-
-    // Accept only when the new value is still an exact prefix of the target
-    if (currentTargetLine.startsWith(nextValue)) {
-      playKeySound(false);
-      setTyped(nextValue);
-
-      if (nextValue.length >= currentTargetLine.length) {
-        handleLineComplete(nextValue, mistakesRef.current);
-      }
-      return;
-    }
-
-    // Wrong key — count mistake, do not advance
-    playKeySound(true);
-    setMistakes((prev) => prev + 1);
-    flashWrong();
-    if (inputRef.current) {
-      inputRef.current.value = typed;
-    }
-  };
-
-  const calculateStats = useCallback(() => {
-    const finishedMistakes = roundResults.current.reduce((acc, r) => acc + r.mistakes, 0);
-    const correctChars = isTimedLesson ? lessonCorrectRef.current + typed.length : typed.length;
-    const mistakeCount = isTimedLesson ? finishedMistakes + mistakes : mistakes;
-    const effectiveSecs = Math.max(elapsedSeconds, 0.5);
-    const minutes = effectiveSecs / 60;
-    const cpm = minutes > 0 ? correctChars / minutes : 0;
-    const wpm = cpm / 5;
-
-    const totalKeypresses = correctChars + mistakeCount;
-    const accuracy =
-      totalKeypresses > 0
-        ? Math.max(0, Math.min(100, Math.round((correctChars / totalKeypresses) * 100)))
-        : 100;
-
-    const progress =
-      currentTargetLine.length > 0
-        ? Math.min(100, Math.round((typed.length / currentTargetLine.length) * 100))
-        : 0;
-
-    const remaining = lesson.timeLimit ? Math.max(0, lesson.timeLimit - elapsedSeconds) : null;
-
-    return {
-      wpm,
-      cpm,
-      accuracy,
-      mistakes: mistakeCount,
-      progress,
-      elapsed: elapsedSeconds,
-      remaining,
-    };
-  }, [
-    typed.length,
-    mistakes,
-    elapsedSeconds,
-    currentTargetLine.length,
-    lesson.timeLimit,
-    isTimedLesson,
-  ]);
+  useEffect(() => {
+    composition.focus();
+  }, [composition, lineIndex]);
 
   const handleRestart = () => {
     recordedRef.current = false;
-    roundResults.current = [];
-    lessonCorrectRef.current = 0;
-    lineStartedElapsedRef.current = 0;
     setShowResultsModal(false);
     setLessonResult(null);
-    setLessonFinished(false);
     setLineIndex(0);
-    resetLineState();
-    resetTimer();
-    focusInput();
+    clearRoundFlags();
+    resetLessonStats();
+    resetSession();
+    composition.focus();
   };
 
   const toggleSound = () => {
@@ -407,13 +326,17 @@ export function TypingPracticeScreen({
     }
   };
 
-  const stats = calculateStats();
-  const nextChar = currentTargetChar;
+  const nextChar = hintUnit;
   const nextHint = nextChar ? keyHintFor(nextChar) : null;
 
-  const resultWpm = lessonResult?.wpm ?? Math.round(stats.wpm);
-  const resultAccuracy = lessonResult?.accuracy ?? Math.round(stats.accuracy);
-  const resultMistakes = lessonResult?.mistakes ?? stats.mistakes;
+  const hudWpm = displayStats.wpmRounded;
+  const hudAccuracy = displayStats.accuracyRounded;
+  const hudMistakes = displayStats.mistakes;
+  const lineProgress = lineStats.progress;
+
+  const resultWpm = lessonResult?.wpm ?? hudWpm;
+  const resultAccuracy = lessonResult?.accuracy ?? hudAccuracy;
+  const resultMistakes = lessonResult?.mistakes ?? hudMistakes;
 
   const starsEarned =
     resultAccuracy >= 95 && resultWpm >= 25
@@ -424,18 +347,21 @@ export function TypingPracticeScreen({
           ? 1
           : 0;
 
-  const targetClusters = splitClusters(currentTargetLine);
-  const targetOffsets = clusterOffsets(currentTargetLine);
+  const targetOffsets = clusterOffsets(sanitizedTarget);
+  const typingReady =
+    inputFocused && !showResultsModal && !lessonResult && !lineCompleted;
+  const needsFocusHint =
+    !inputFocused && !showResultsModal && !lessonResult && !lineCompleted;
 
   return (
     <div
-      className="min-h-screen bg-background text-foreground flex flex-col justify-between"
-      onClick={focusInput}
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+      onClick={() => {
+        if (!showResultsModal) composition.focus();
+      }}
     >
-      {/* Clean Top Bar */}
-      <header className="border-b border-border bg-card/80 px-4 sm:px-6 py-3">
+      <header className="shrink-0 border-b border-border bg-card/80 px-4 sm:px-6 py-3">
         <div className="mx-auto max-w-5xl flex items-center justify-between gap-3">
-          {/* Left: Back & Title */}
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={(e) => {
@@ -448,26 +374,17 @@ export function TypingPracticeScreen({
               <span className="km">ត្រលប់</span>
             </button>
 
-            <div className="min-w-0 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="km text-sm font-bold text-primary bg-primary-soft px-2.5 py-1 rounded shrink-0">
-                  {level.badge}
-                </span>
-                <h2 className="km text-sm sm:text-base font-bold text-foreground truncate">
-                  {lesson.title}
-                </h2>
-              </div>
-              {lesson.hint && (
-                <p className="km text-xs sm:text-sm text-muted-foreground truncate pl-0.5">
-                  {lesson.hint}
-                </p>
-              )}
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="km text-sm font-bold text-primary bg-primary-soft px-2.5 py-1 rounded shrink-0">
+                {level.badge}
+              </span>
+              <h2 className="km text-sm sm:text-base font-bold text-foreground truncate">
+                {lesson.title}
+              </h2>
             </div>
           </div>
 
-          {/* Right: Controls */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Font size */}
             <div
               className="hidden sm:flex items-center gap-0.5 rounded-lg border border-border bg-secondary/50 p-0.5"
               role="group"
@@ -503,7 +420,6 @@ export function TypingPracticeScreen({
               ))}
             </div>
 
-            {/* Audio Toggle */}
             <Tip label={soundOn ? "បិទសំឡេង" : "បើកសំឡេង"}>
               <button
                 onClick={(e) => {
@@ -522,7 +438,6 @@ export function TypingPracticeScreen({
               </button>
             </Tip>
 
-            {/* Keyboard Guide Toggle */}
             <Tip label={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}>
               <button
                 onClick={(e) => {
@@ -544,14 +459,12 @@ export function TypingPracticeScreen({
         </div>
       </header>
 
-      {/* Main Practice Area */}
-      <main className="mx-auto max-w-5xl w-full px-4 sm:px-6 py-5 flex-1 flex flex-col justify-start">
-        {/* HUD Stats */}
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-start overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         <div className="grid grid-cols-4 gap-2.5 mb-4">
           <div className="card-elevated p-3 text-center">
             <span className="km text-sm text-muted-foreground block font-medium">ល្បឿន WPM</span>
             <span className="font-mono text-2xl sm:text-3xl font-extrabold text-primary">
-              {Math.round(stats.wpm)}
+              {hudWpm}
             </span>
           </div>
 
@@ -562,14 +475,14 @@ export function TypingPracticeScreen({
             <span
               className={cn(
                 "font-mono text-2xl sm:text-3xl font-extrabold",
-                stats.accuracy >= 90
+                hudAccuracy >= 90
                   ? "text-success"
-                  : stats.accuracy >= 75
+                  : hudAccuracy >= 75
                     ? "text-warning"
                     : "text-destructive",
               )}
             >
-              {Math.round(stats.accuracy)}%
+              {hudAccuracy}%
             </span>
           </div>
 
@@ -578,10 +491,10 @@ export function TypingPracticeScreen({
             <span
               className={cn(
                 "font-mono text-2xl sm:text-3xl font-extrabold",
-                stats.mistakes === 0 ? "text-muted-foreground" : "text-destructive",
+                hudMistakes === 0 ? "text-muted-foreground" : "text-destructive",
               )}
             >
-              {stats.mistakes}
+              {hudMistakes}
             </span>
           </div>
 
@@ -597,185 +510,200 @@ export function TypingPracticeScreen({
             <span
               className={cn(
                 "font-mono text-2xl sm:text-3xl font-extrabold",
-                lesson.timeLimit && stats.remaining !== null && stats.remaining <= 10
+                lesson.timeLimit && displayStats.remaining !== null && displayStats.remaining <= 10
                   ? "text-destructive animate-pulse"
                   : "text-foreground",
               )}
             >
-              {lesson.timeLimit && stats.remaining !== null
-                ? `${Math.round(stats.remaining)}s`
-                : `${Math.round(stats.elapsed)}s`}
+              {lesson.timeLimit && displayStats.remaining !== null
+                ? `${Math.round(displayStats.remaining)}s`
+                : `${Math.round(displayStats.elapsed)}s`}
             </span>
           </div>
         </div>
 
-        {/* Next Key Indicator Pill (clean & compact) */}
-        {nextChar && (
-          <div className="flex items-center justify-between px-1 mb-2.5">
-            <div className="flex items-center gap-2.5">
-              <span className="text-sm text-muted-foreground km font-medium">គ្រាប់ចុច:</span>
-              {nextChar === ZWSP ? (
-                <span className="inline-flex items-center gap-1.5 font-bold text-primary">
-                  <span className="km text-sm sm:text-base font-semibold">Space</span>
-                  <span className="km text-xs font-medium text-muted-foreground">(ZWSP)</span>
+        {/* Fixed-height slot: live key hints must not reflow content below */}
+        <div className="flex h-8 items-center justify-between gap-3 px-1 mb-2.5 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 whitespace-nowrap">
+            <span className="shrink-0 text-sm text-muted-foreground km font-medium">គ្រាប់ចុច៖</span>
+            {nextChar ? (
+              <>
+                <span className="inline-flex h-7 w-[11.5rem] shrink-0 items-center gap-1.5 overflow-hidden font-bold text-primary">
+                  {nextChar === ZWSP ? (
+                    <>
+                      <span className="km text-sm sm:text-base font-semibold">Space</span>
+                      <span className="km text-xs font-medium text-muted-foreground">(ZWSP)</span>
+                    </>
+                  ) : nextChar === " " ? (
+                    <>
+                      <span className="km text-sm sm:text-base font-semibold">Shift + Space</span>
+                      <span className="km text-xs font-medium text-muted-foreground">(ដកឃ្លា)</span>
+                    </>
+                  ) : (
+                    <span className="font-khmer text-base sm:text-lg leading-none">
+                      {renderableCluster(nextChar)}
+                    </span>
+                  )}
                 </span>
-              ) : nextChar === " " ? (
-                <span className="inline-flex items-center gap-1.5 font-bold text-primary">
-                  <span className="km text-sm sm:text-base font-semibold">Shift + Space</span>
-                  <span className="km text-xs font-medium text-muted-foreground">(ដកឃ្លា)</span>
+                <span className="inline-flex h-7 w-[8.75rem] shrink-0 items-center justify-center overflow-hidden font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 rounded-md">
+                  {nextChar === ZWSP
+                    ? "Space"
+                    : nextChar === " "
+                      ? "Shift + Space"
+                      : nextHint
+                        ? nextHint.shift
+                          ? `Shift + ${KEY_LABELS[nextHint.code] ?? nextHint.code}`
+                          : (KEY_LABELS[nextHint.code] ?? nextHint.code)
+                        : "\u00A0"}
                 </span>
-              ) : (
-                <span className="font-bold text-primary text-base sm:text-lg font-khmer">
-                  {renderableCluster(nextChar)}
-                </span>
-              )}
-              {nextHint && nextChar !== ZWSP && nextChar !== " " && (
-                <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
-                  {nextHint.shift
-                    ? `Shift + ${KEY_LABELS[nextHint.code] ?? nextHint.code}`
-                    : (KEY_LABELS[nextHint.code] ?? nextHint.code)}
-                </span>
-              )}
-              {nextChar === ZWSP && (
-                <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
-                  Space
-                </span>
-              )}
-              {nextChar === " " && (
-                <span className="font-mono text-sm font-bold bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-md">
-                  Shift + Space
-                </span>
-              )}
-            </div>
-
-            <div className="text-sm text-muted-foreground font-mono font-medium">
-              {stats.progress}%
-            </div>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground/50" aria-hidden>
+                —
+              </span>
+            )}
           </div>
-        )}
 
-        {/* Typing Stage Box */}
+          <div className="shrink-0 text-sm text-muted-foreground font-mono font-medium tabular-nums">
+            {Math.round(lineProgress)}%
+          </div>
+        </div>
+
         <div className="flex flex-col gap-2">
-          {/* Progress bar */}
           <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
             <div
               className="h-full rounded-full bg-primary transition-all duration-150"
-              style={{ width: `${stats.progress}%` }}
+              style={{ width: `${lineProgress}%` }}
             />
           </div>
 
           <div
-            className="relative card-elevated p-6 sm:p-8 min-h-[150px] sm:min-h-[180px] flex flex-col justify-center cursor-text transition-all"
-            onClick={focusInput}
+            className={cn(
+              "relative card-elevated p-6 sm:p-8 min-h-[150px] sm:min-h-[180px] flex flex-col justify-center cursor-text transition-all",
+              needsFocusHint && "ring-1 ring-primary/25",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              composition.focus();
+            }}
           >
+            {/* Near-prompt input so OS Khmer IME UI positions correctly */}
             <input
               ref={inputRef}
               type="text"
-              value={typed}
-              onChange={(e) => handleChange(e.target.value)}
-              className="absolute opacity-0 pointer-events-none -top-1000 left-0"
+              defaultValue={typed}
+              className="absolute inset-x-6 bottom-3 h-px w-[calc(100%-3rem)] opacity-0 caret-transparent"
               autoFocus
-              autoCapitalize="none"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck="false"
               aria-label="Khmer typing input"
+              {...composition.inputProps}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => {
+                requestAnimationFrame(() => {
+                  setInputFocused(document.activeElement === inputRef.current);
+                });
+              }}
             />
 
-            {/* Target Text — render by typographic cluster so vowels stay attached */}
             <div
+              ref={promptRef}
               className={cn(
-                "km font-khmer leading-loose select-none break-words whitespace-pre-wrap text-left transition-all",
+                "relative km font-khmer leading-loose select-none break-words whitespace-pre-wrap text-left transition-all",
                 fontSize === "normal" && "text-lg sm:text-xl",
                 fontSize === "large" && "text-2xl sm:text-3xl",
                 fontSize === "xlarge" && "text-3xl sm:text-4xl",
+                needsFocusHint && "opacity-70",
               )}
             >
+              <TypingCaret
+                containerRef={promptRef}
+                clusterIndex={caretClusterIndex}
+                active={typingReady}
+                wrong={wrongFlash}
+              />
+
               {targetClusters.map((cluster, index) => {
                 const start = targetOffsets[index] ?? 0;
                 const end = start + cluster.length;
-                const typedInCluster = typed.slice(start, Math.min(typed.length, end));
-                const expectedSoFar = cluster.slice(0, typedInCluster.length);
-                const fullyTyped = typed.length >= end;
-                const isCurrent = typed.length >= start && typed.length < end;
-                const isCorrect = fullyTyped && typed.slice(start, end) === cluster;
-                const isWrong = typedInCluster.length > 0 && typedInCluster !== expectedSoFar;
+                const isCurrent = index === caretClusterIndex;
                 const isZwsp = cluster === ZWSP;
                 const isSpace = cluster === " " || isZwsp;
-                // Render ZWSP as a blank gap (same as normal space) — type with Space on Khmer IME
                 const displayChar = isSpace ? "\u00A0" : cluster;
+
+                // Code-unit progress (matches metrics + mid-cluster caret)
+                const progressOffset = lineStats.correct;
+                const fullyCorrect = end <= progressOffset;
 
                 const glyphClassName = cn(
                   "relative inline transition-colors",
-                  // Keep a narrow natural gap — close to default word spacing
                   isSpace && "inline-block min-w-[0.28em] text-center",
-                  isCorrect && "text-primary",
-                  isWrong && "text-destructive line-through",
-                  isCurrent &&
-                    wrongFlash &&
-                    "text-destructive after:absolute after:left-0 after:top-[0.15em] after:bottom-[0.1em] after:w-[2px] after:rounded-full after:bg-destructive",
-                  isCurrent &&
-                    !isWrong &&
-                    !wrongFlash &&
-                    "text-foreground after:absolute after:left-0 after:top-[0.15em] after:bottom-[0.1em] after:w-[2px] after:rounded-full after:bg-primary after:animate-pulse",
-                  !fullyTyped && !isCurrent && !isWrong && "text-foreground/70",
-                  isSpace && !isCorrect && !isWrong && "text-muted-foreground/50",
+                  fullyCorrect && "text-primary",
+                  isCurrent && wrongFlash && "text-destructive",
+                  !fullyCorrect && !isCurrent && "text-foreground/70",
+                  isSpace && !fullyCorrect && "text-muted-foreground/50",
                 );
 
                 if (isZwsp) {
                   return (
                     <Tip key={`${start}-${index}`} label="Space (ZWSP)">
-                      <span className={glyphClassName}>{displayChar}</span>
+                      <span data-cluster-index={index} className={glyphClassName}>
+                        {displayChar}
+                      </span>
                     </Tip>
                   );
                 }
 
                 return (
-                  <span key={`${start}-${index}`} className={glyphClassName}>
+                  <span key={`${start}-${index}`} data-cluster-index={index} className={glyphClassName}>
                     {displayChar}
                   </span>
                 );
               })}
             </div>
+
+            {needsFocusHint && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[inherit] bg-background/70 backdrop-blur-[2px]">
+                <p className="km rounded-xl border border-primary/30 bg-card px-4 py-2 text-base font-bold text-foreground shadow-md">
+                  ចុចទីនេះដើម្បីវាយ
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Keyboard Guide */}
         {showKeyboard && (
-          <div className="mt-5">
-            <KhmerKeyboard nextChar={nextChar} />
+          <div className="mt-4 min-h-0 flex-1">
+            <KhmerKeyboard className="h-full max-h-[min(100%,280px)] sm:max-h-[min(100%,320px)]" {...(nextChar ? { nextChar } : {})} />
           </div>
         )}
       </main>
 
-      {/* Completion Modal */}
       {showResultsModal && lessonResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="card-elevated max-w-md w-full p-6 sm:p-7 bg-card border-border shadow-lg text-center animate-in zoom-in-95 duration-200">
-            <div className="inline-flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground mb-3.5">
-              <Trophy className="size-7" />
+          <div className="card-elevated max-w-sm w-full p-4 sm:p-5 bg-card border-border shadow-lg text-center animate-in zoom-in-95 duration-200">
+            <div className="inline-flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-2.5">
+              <Trophy className="size-5" />
             </div>
 
             <h3 className="km text-2xl sm:text-3xl font-bold text-foreground">
               {lessonResult.timedOut ? "អស់ពេល!" : "អបអរសាទរ!"}
             </h3>
-            <p className="km text-sm sm:text-base text-muted-foreground mt-1.5">
+            <p className="km text-sm sm:text-base text-muted-foreground mt-1">
               {level.badge} › {lesson.title}
             </p>
 
-            <div className="mt-4 flex items-center justify-center gap-1.5">
+            <div className="mt-2.5 flex items-center justify-center gap-1">
               {[1, 2, 3].map((star) => (
                 <Star
                   key={star}
                   className={cn(
-                    "size-6",
+                    "size-4.5",
                     star <= starsEarned ? "fill-warning text-warning" : "text-muted-foreground/30",
                   )}
                 />
               ))}
             </div>
 
-            <div className="mt-5 grid grid-cols-3 gap-2.5 rounded-xl bg-secondary/50 p-3.5 text-center">
+            <div className="mt-3.5 grid grid-cols-3 gap-2 rounded-lg bg-secondary/50 p-2.5 text-center">
               <div>
                 <span className="km text-sm text-muted-foreground block font-medium">ល្បឿន</span>
                 <span className="font-mono text-xl sm:text-2xl font-bold text-primary">
@@ -799,27 +727,27 @@ export function TypingPracticeScreen({
             </div>
 
             {lessonResult.previousBest && (
-              <p className="km text-sm text-muted-foreground mt-3.5 font-medium">
-                កំណត់ត្រាមុន: {lessonResult.previousBest.bestWpm} WPM ·{" "}
+              <p className="km text-sm text-muted-foreground mt-2.5 font-medium">
+                កំណត់ត្រាលើកមុន៖ {lessonResult.previousBest.bestWpm} WPM ·{" "}
                 {lessonResult.previousBest.bestAccuracy}%
               </p>
             )}
 
-            <div className="mt-6 flex flex-col gap-2.5">
+            <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={handleGoToNextLesson}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-base font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer km"
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-base font-semibold text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer km"
               >
-                <Sparkles className="size-4.5" />
+                <Sparkles className="size-4" />
                 <span>បន្តទៅមេរៀនបន្ទាប់</span>
               </button>
 
               <button
                 onClick={handleRestart}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-all cursor-pointer km"
+                className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-all cursor-pointer km"
               >
-                <RotateCcw className="size-4" />
-                <span>ហាត់ជុំនេះឡើងវិញ</span>
+                <RotateCcw className="size-3.5" />
+                <span>ហាត់មេរៀននេះឡើងវិញ</span>
               </button>
             </div>
           </div>

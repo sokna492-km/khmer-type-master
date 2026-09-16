@@ -94,7 +94,10 @@ for (const row of KEY_ROWS) {
   }
 }
 
-/** Which physical key produces this character, if we know it. */
+/**
+ * Which physical key produces this character, if we know it.
+ * Pass a single code unit from nextHintUnit() for stepwise COENG hints.
+ */
 export function keyHintFor(ch: string | undefined): KeyHint | null {
   if (!ch) return null;
   return HINTS.get(ch) ?? null;

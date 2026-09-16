@@ -10,6 +10,8 @@ import {
 import { type ReactNode } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { krumathHomeUrl } from "@/lib/krumathUrls";
+import { publicAsset } from "@/lib/public-url";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -58,7 +60,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             Try again
           </button>
           <a
-            href="/"
+            href={krumathHomeUrl()}
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             Go home
@@ -109,7 +111,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: publicAsset("favicon.svg"), type: "image/svg+xml" },
     ],
   }),
   shellComponent: RootShell,

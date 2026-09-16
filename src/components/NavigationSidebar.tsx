@@ -131,7 +131,7 @@ export function NavigationSidebar({
                       {comp > 0 && (
                         <span
                           className={cn(
-                            "text-xs rounded px-1.5 py-0.5 font-mono font-semibold transition-colors",
+                            "km text-xs rounded px-1.5 py-0.5 font-semibold transition-colors",
                             comp === 100
                               ? "bg-success/15 text-success"
                               : "bg-primary/10 text-primary",
@@ -273,7 +273,7 @@ export function NavigationSidebar({
           const firstLesson = level.lessons[0];
 
           return (
-            <Tip key={level.id} label={`${level.badge} — ${level.title}`} side="right">
+            <Tip key={level.id} label={`${level.badge}៖ ${level.title}`} side="right">
               <button
                 onClick={() => {
                   if (firstLesson) onSelectLesson(level, firstLesson);
@@ -314,7 +314,7 @@ export function NavigationSidebar({
       {/* Desktop Sidebar */}
       <aside
         style={{ width: isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
-        className="hidden lg:flex shrink-0 h-screen sticky top-0 z-20 flex-col relative transition-[width] duration-300 ease-out"
+        className="relative z-20 hidden h-full shrink-0 flex-col transition-[width] duration-300 ease-out lg:flex"
       >
         <div className="h-full w-full overflow-hidden">
           {isCollapsed ? collapsedRail : sidebarContent}

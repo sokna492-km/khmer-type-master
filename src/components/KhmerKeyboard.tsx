@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { keyHintFor } from "@/lib/keymap";
 import { getKeyHandFingers } from "@/lib/finger-guide";
+import { publicAsset } from "@/lib/public-url";
 import { NIDA_SVG_KEYMAP, type SvgKeyBox } from "@/data/nidaSvgKeymap";
 import { LeftHandSvg, RightHandSvg } from "@/components/HandVisualizer";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ function getRecommendedShiftKey(code: string): "ShiftLeft" | "ShiftRight" {
 
 export function KhmerKeyboard({ nextChar, className }: Props) {
   const [pressedKeyCode, setPressedKeyCode] = useState<string | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const hint = useMemo(() => keyHintFor(nextChar), [nextChar]);
   const requiresShift = Boolean(hint?.shift);
@@ -92,11 +94,28 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
     return norm && NIDA_SVG_KEYMAP[norm] ? NIDA_SVG_KEYMAP[norm] : null;
   }, [pressedKeyCode]);
 
+  // Hovered key box for sky overlay (skip when same as pressed — press wins visually)
+  const hoveredKeyBox: SvgKeyBox | null = useMemo(() => {
+    if (!hoveredKey) return null;
+    const pressedNorm = pressedKeyCode ? normalizeToKeymapKey(pressedKeyCode) : null;
+    if (pressedNorm && pressedNorm === hoveredKey) return null;
+    return NIDA_SVG_KEYMAP[hoveredKey] ?? null;
+  }, [hoveredKey, pressedKeyCode]);
+
   // Real-time highlighted hand fingers for target key
-  const { leftFingers: activeLeftFingers, rightFingers: activeRightFingers } = useMemo(
+  const { leftFingers: targetLeftFingers, rightFingers: targetRightFingers } = useMemo(
     () => getKeyHandFingers(hint?.code, requiresShift),
     [hint?.code, requiresShift],
   );
+
+  // Hover replaces target for active (amber) fingers while pointer is over a key
+  const { leftFingers: hoveredLeftFingers, rightFingers: hoveredRightFingers } = useMemo(
+    () => getKeyHandFingers(hoveredKey ?? undefined, false),
+    [hoveredKey],
+  );
+
+  const activeLeftFingers = hoveredKey ? hoveredLeftFingers : targetLeftFingers;
+  const activeRightFingers = hoveredKey ? hoveredRightFingers : targetRightFingers;
 
   // Real-time highlighted hand fingers for physically pressed key
   const { leftFingers: pressedLeftFingers, rightFingers: pressedRightFingers } = useMemo(() => {
@@ -114,131 +133,155 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
     setPressedKeyCode(null);
   }, []);
 
+  const clearHover = useCallback(() => {
+    setHoveredKey(null);
+  }, []);
+
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", clearHover);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", clearHover);
     };
-  }, [handleKeyDown, handleKeyUp]);
+  }, [handleKeyDown, handleKeyUp, clearHover]);
+
+  const isHovering = Boolean(hoveredKey);
 
   return (
-    <div className={cn("w-full select-none py-1", className)}>
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full select-none flex-col justify-center",
+        className,
+      )}
+    >
       {/* Keyboard Layout Flanked by Real-Time Auto-Highlighting Hands directly on background */}
-      <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-3 lg:gap-4">
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-1 sm:gap-2 md:gap-3 lg:gap-4">
         {/* Left Hand Guide */}
-        <div className="hidden sm:flex flex-col items-center justify-center shrink-0 w-20 sm:w-24 md:w-28 lg:w-32 xl:w-36">
+        <div className="hidden sm:flex h-full max-h-full w-20 shrink-0 flex-col items-center justify-center sm:w-24 md:w-28 lg:w-32 xl:w-36">
           <LeftHandSvg
             activeFingers={activeLeftFingers}
             pressedFingers={pressedLeftFingers}
-            className="w-full h-auto max-h-60 lg:max-h-64 select-none pointer-events-none"
+            className="h-auto max-h-[min(100%,16rem)] w-full select-none pointer-events-none"
           />
         </div>
 
         {/* Official Wikimedia NiDA SVG Layout with Clean Minimalist Key Highlights */}
-        <div className="relative flex-[1.35] min-w-0 rounded-xl overflow-hidden bg-transparent select-none">
-          {/* SVG Keyboard Graphic */}
-          <img
-            src="/khmer_layout.svg"
-            alt="Khmer NiDA Unicode Keyboard Layout"
-            className="w-full h-auto block select-none pointer-events-none"
-            draggable={false}
-          />
+        <div className="relative flex h-full min-h-0 min-w-0 flex-[1.35] items-center justify-center overflow-hidden rounded-xl bg-transparent select-none">
+          {/* SVG Keyboard Graphic — capped to parent height so the page never grows */}
+          <div className="relative max-h-full w-full">
+            <img
+              src={publicAsset("khmer_layout.svg")}
+              alt="Khmer NiDA Unicode Keyboard Layout"
+              className="mx-auto block h-auto max-h-full w-full object-contain select-none pointer-events-none"
+              draggable={false}
+            />
 
-          {/* Dynamic Real-Time Interactive SVG Highlight Layer */}
-          <svg
-            viewBox="0 0 857 333"
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            {/* 1. Recommended Shift Key Highlight (clean outline when nextChar requires Shift) */}
-            {shiftKeyBox && (
-              <path
-                d={shiftKeyBox.d}
-                fill="rgba(147, 51, 234, 0.22)"
-                stroke="#9333EA"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-            )}
-
-            {/* 2. Target Character Key Highlight (matching the amber/orange finger in reference image) */}
-            {targetKeyBox && (
-              <path
-                d={targetKeyBox.d}
-                fill="rgba(245, 158, 11, 0.35)"
-                stroke="#d97706"
-                strokeWidth="2.5"
-                strokeLinejoin="round"
-              />
-            )}
-
-            {/* 3. Physical Keypress Real-time Feedback (clean emerald accent on press) */}
-            {pressedKeyBox && (
-              <path
-                d={pressedKeyBox.d}
-                fill="rgba(16, 185, 129, 0.25)"
-                stroke="#059669"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-            )}
-          </svg>
-
-          {/* Interactive hitboxes for keys to allow clicking / testing with subtle minimalist hover */}
-          <div className="absolute inset-0 w-full h-full pointer-events-auto">
+            {/* Dynamic Real-Time Interactive SVG Highlight Layer */}
             <svg
               viewBox="0 0 857 333"
-              className="w-full h-full"
+              className="pointer-events-none absolute inset-0 h-full w-full"
               preserveAspectRatio="xMidYMid meet"
             >
-              {Object.entries(NIDA_SVG_KEYMAP).map(([keyName, box]) => (
+              {/* 1. Target / Shift (suppressed while hovering so one focus key reads clearly) */}
+              {!isHovering && shiftKeyBox && (
                 <path
-                  key={keyName}
-                  d={box.d}
-                  fill="transparent"
-                  className="cursor-pointer hover:fill-foreground/[0.04] transition-colors"
-                  onClick={() => {
-                    setPressedKeyCode(keyName);
-                    setTimeout(() => setPressedKeyCode(null), 200);
-                  }}
+                  d={shiftKeyBox.d}
+                  fill="rgba(147, 51, 234, 0.22)"
+                  stroke="#9333EA"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
                 />
-              ))}
+              )}
+
+              {!isHovering && targetKeyBox && (
+                <path
+                  d={targetKeyBox.d}
+                  fill="rgba(245, 158, 11, 0.35)"
+                  stroke="#d97706"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* 2. Hover key highlight (sky — distinct from amber target and emerald press) */}
+              {hoveredKeyBox && (
+                <path
+                  d={hoveredKeyBox.d}
+                  fill="rgba(14, 165, 233, 0.18)"
+                  stroke="#0284c7"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* 3. Physical Keypress Real-time Feedback (emerald — always on top) */}
+              {pressedKeyBox && (
+                <path
+                  d={pressedKeyBox.d}
+                  fill="rgba(16, 185, 129, 0.25)"
+                  stroke="#059669"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              )}
             </svg>
+
+            {/* Interactive hitboxes for keys — hover syncs hands; click flashes press */}
+            <div
+              className="pointer-events-auto absolute inset-0 h-full w-full"
+              onMouseLeave={clearHover}
+            >
+              <svg
+                viewBox="0 0 857 333"
+                className="h-full w-full"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                {Object.entries(NIDA_SVG_KEYMAP).map(([keyName, box]) => (
+                  <path
+                    key={keyName}
+                    d={box.d}
+                    fill="transparent"
+                    className="cursor-pointer hover:fill-foreground/[0.04] transition-colors"
+                    onMouseEnter={() => setHoveredKey(keyName)}
+                    onMouseLeave={() => setHoveredKey((k) => (k === keyName ? null : k))}
+                    onClick={() => {
+                      setPressedKeyCode(keyName);
+                      setTimeout(() => setPressedKeyCode(null), 200);
+                    }}
+                  />
+                ))}
+              </svg>
+            </div>
           </div>
         </div>
 
         {/* Right Hand Guide */}
-        <div className="hidden sm:flex flex-col items-center justify-center shrink-0 w-20 sm:w-24 md:w-28 lg:w-32 xl:w-36">
+        <div className="hidden sm:flex h-full max-h-full w-20 shrink-0 flex-col items-center justify-center sm:w-24 md:w-28 lg:w-32 xl:w-36">
           <RightHandSvg
             activeFingers={activeRightFingers}
             pressedFingers={pressedRightFingers}
-            className="w-full h-auto max-h-60 lg:max-h-64 select-none pointer-events-none"
+            className="h-auto max-h-[min(100%,16rem)] w-full select-none pointer-events-none"
           />
         </div>
       </div>
 
       {/* Mobile Hand Guide (visible only on small screens < sm) */}
-      <div className="flex sm:hidden items-center justify-center gap-8 pt-3 mt-3">
-        <div className="flex flex-col items-center w-24">
-          <span className="text-[10px] font-semibold text-muted-foreground mb-1 km">
-            ដៃឆ្វេង (Left)
-          </span>
+      <div className="mt-2 flex shrink-0 items-center justify-center gap-8 pt-2 sm:hidden">
+        <div className="flex w-24 flex-col items-center">
           <LeftHandSvg
             activeFingers={activeLeftFingers}
             pressedFingers={pressedLeftFingers}
-            className="w-20 h-auto"
+            className="h-auto w-20"
           />
         </div>
-        <div className="flex flex-col items-center w-24">
-          <span className="text-[10px] font-semibold text-muted-foreground mb-1 km">
-            ដៃស្តាំ (Right)
-          </span>
+        <div className="flex w-24 flex-col items-center">
           <RightHandSvg
             activeFingers={activeRightFingers}
             pressedFingers={pressedRightFingers}
-            className="w-20 h-auto"
+            className="h-auto w-20"
           />
         </div>
       </div>

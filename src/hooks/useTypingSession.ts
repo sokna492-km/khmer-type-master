@@ -1,47 +1,78 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { countWords } from "@/lib/khmer";
+import {
+  compareTyping,
+  deleteBackward,
+  nextHintUnit,
+  normalizeKhmer,
+  sanitizeTarget,
+  splitClusters,
+  type TypingComparison,
+  type TypingUnitState,
+} from "@/lib/khmer";
+import { countFreeMistakeDelta, strictCommit } from "@/lib/typing-input";
+import { correctCodeUnitCount } from "@/lib/typing-metrics";
 
+export type TypingMode = "strict" | "free";
+
+/** Line-local counters. Lesson HUD must use useLessonStats, not these WPM/accuracy fields. */
 export type TypingStats = {
   elapsed: number;
-  wpm: number;
-  cpm: number;
-  accuracy: number;
   mistakes: number;
   correct: number;
   progress: number;
-  remaining: number | null;
 };
+
+export type CommitResult =
+  | { accepted: true; value: string; mistakesAdded: number }
+  | { accepted: false; value: string; mistakesAdded: number };
 
 export type TypingSession = ReturnType<typeof useTypingSession>;
 
+export type UseTypingSessionOptions = {
+  target: string;
+  mode: TypingMode;
+};
+
 /**
- * Comparison-only typing engine: input arrives already composed by the
- * platform Khmer IME, so the session compares Unicode code units against the
- * target and derives stats. No key remapping happens here, which keeps
- * subscripts, stacked coeng, ZWSP and AltGr sequences correct by construction.
+ * Dual-mode Khmer typing line engine.
+ * - strict: reject wrong input, flash, do not advance (keys/words lessons)
+ * - free: accept wrong input, highlight mismatches (text/exam lessons)
+ *
+ * Reports raw correct/mistake counters. Lesson-scoped WPM/accuracy/time live in useLessonStats.
+ * Input is expected already composed by the OS Khmer IME.
  */
-export function useTypingSession(target: string, timeLimit?: number) {
+export function useTypingSession({ target: rawTarget, mode }: UseTypingSessionOptions) {
+  const target = useMemo(() => sanitizeTarget(rawTarget), [rawTarget]);
+
   const [typed, setTyped] = useState("");
+  const [composition, setComposition] = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [mistakes, setMistakes] = useState(0);
+  const [wrongFlash, setWrongFlash] = useState(false);
   const [tick, setTick] = useState(0);
   const errorIndexes = useRef<Set<number>>(new Set());
+  const wrongFlashTimer = useRef<number | null>(null);
 
   const reset = useCallback(() => {
     setTyped("");
+    setComposition("");
     setStartedAt(null);
     setFinishedAt(null);
     setMistakes(0);
+    setWrongFlash(false);
     setTick(0);
     errorIndexes.current = new Set();
+    if (wrongFlashTimer.current) {
+      window.clearTimeout(wrongFlashTimer.current);
+      wrongFlashTimer.current = null;
+    }
   }, []);
 
-  // restart when the target changes
   useEffect(() => {
     reset();
-  }, [target, reset]);
+  }, [target, mode, reset]);
 
   const completed = finishedAt !== null;
 
@@ -51,28 +82,105 @@ export function useTypingSession(target: string, timeLimit?: number) {
     return () => window.clearInterval(id);
   }, [startedAt, completed]);
 
-  const handleChange = useCallback(
-    (value: string) => {
-      if (completed) return;
+  const flashWrong = useCallback(() => {
+    setWrongFlash(true);
+    if (wrongFlashTimer.current) window.clearTimeout(wrongFlashTimer.current);
+    wrongFlashTimer.current = window.setTimeout(() => {
+      setWrongFlash(false);
+      wrongFlashTimer.current = null;
+    }, 160);
+  }, []);
+
+  const ensureStarted = useCallback(
+    (now = Date.now()) => {
+      if (startedAt === null) setStartedAt(now);
+    },
+    [startedAt],
+  );
+
+  const comparison: TypingComparison = useMemo(
+    () => compareTyping(target, typed),
+    [target, typed],
+  );
+
+  const correct = useMemo(() => correctCodeUnitCount(target, typed), [target, typed]);
+
+  const handleCommit = useCallback(
+    (nextValue: string): CommitResult => {
+      if (completed) return { accepted: false, value: typed, mistakesAdded: 0 };
 
       const now = Date.now();
-      if (startedAt === null && value.length > 0) setStartedAt(now);
+      const normalizedNext = normalizeKhmer(nextValue);
 
-      if (value.length > typed.length) {
-        for (let i = typed.length; i < value.length; i += 1) {
-          if (value[i] !== target[i]) {
-            errorIndexes.current.add(i);
-            setMistakes((m) => m + 1);
-          }
+      // Backspace / shorter value
+      if (normalizedNext.length < typed.length || nextValue.length < typed.length) {
+        ensureStarted(now);
+        const value = normalizeKhmer(nextValue);
+        setTyped(value);
+        return { accepted: true, value, mistakesAdded: 0 };
+      }
+
+      if (normalizedNext === typed) {
+        return { accepted: true, value: typed, mistakesAdded: 0 };
+      }
+
+      ensureStarted(now);
+
+      if (mode === "strict") {
+        const targetNorm = normalizeKhmer(target);
+        const decision = strictCommit(targetNorm, typed, normalizedNext);
+        if (decision.kind === "accept") {
+          setTyped(decision.value);
+          if (decision.value === targetNorm) setFinishedAt(now);
+          return { accepted: true, value: decision.value, mistakesAdded: 0 };
+        }
+        if (decision.kind === "noop") {
+          return { accepted: true, value: decision.value, mistakesAdded: 0 };
+        }
+        // Strict: +1 per rejected commit (lesson gross-accuracy contract)
+        setMistakes((m) => m + 1);
+        flashWrong();
+        return { accepted: false, value: typed, mistakesAdded: 1 };
+      }
+
+      // Free mode: accept everything; mistakes = UTF-16 units added past correct prefix
+      const correctNext = correctCodeUnitCount(target, normalizedNext);
+      let mistakesAdded = 0;
+      if (correctNext < normalizedNext.length) {
+        for (let i = correctNext; i < normalizedNext.length; i += 1) {
+          errorIndexes.current.add(i);
+        }
+        mistakesAdded = countFreeMistakeDelta(typed, normalizedNext, correctNext);
+        if (mistakesAdded > 0) {
+          setMistakes((m) => m + mistakesAdded);
         }
       }
 
-      setTyped(value);
-
-      if (value === target) setFinishedAt(now);
+      setTyped(normalizedNext);
+      const targetNorm = normalizeKhmer(target);
+      if (normalizedNext === targetNorm) {
+        setFinishedAt(now);
+      }
+      return { accepted: true, value: normalizedNext, mistakesAdded };
     },
-    [completed, startedAt, target, typed.length],
+    [completed, typed, target, mode, ensureStarted, flashWrong],
   );
+
+  const handleBackspace = useCallback(() => {
+    if (completed || typed.length === 0) return typed;
+    ensureStarted();
+    const { text } = deleteBackward(typed, typed.length, { normalize: false });
+    setTyped(text);
+    return text;
+  }, [completed, typed, ensureStarted]);
+
+  const setCompositionText = useCallback((preedit: string) => {
+    setComposition(preedit);
+  }, []);
+
+  const clearComposition = useCallback(() => {
+    setComposition("");
+  }, []);
 
   const finish = useCallback(() => {
     setFinishedAt((prev) => prev ?? Date.now());
@@ -82,38 +190,61 @@ export function useTypingSession(target: string, timeLimit?: number) {
     void tick;
     const end = finishedAt ?? Date.now();
     const elapsed = startedAt === null ? 0 : Math.max((end - startedAt) / 1000, 0);
+    const targetLen = Math.max(normalizeKhmer(target).length, 1);
+    const progress = target.length > 0 ? Math.min(correct / targetLen, 1) * 100 : 0;
 
-    let correct = 0;
-    for (let i = 0; i < typed.length; i += 1) {
-      if (typed[i] === target[i]) correct += 1;
+    return {
+      elapsed,
+      mistakes,
+      correct,
+      progress,
+    };
+  }, [tick, finishedAt, startedAt, mistakes, correct, target]);
+
+  const targetClusters = useMemo(() => splitClusters(target), [target]);
+  const hintUnit = useMemo(() => nextHintUnit(target, typed), [target, typed]);
+
+  const caretClusterIndex = useMemo(() => {
+    const targetNorm = normalizeKhmer(target);
+    // Prefer code-unit caret while typed is still a prefix (mid-cluster typing)
+    const offset = targetNorm.startsWith(typed)
+      ? typed.length
+      : mode === "free"
+        ? Math.min(
+            Math.max(comparison.mismatchOffset, typed.length > 0 ? comparison.mismatchOffset : 0),
+            targetNorm.length,
+          )
+        : correct;
+
+    let at = 0;
+    for (let i = 0; i < targetClusters.length; i += 1) {
+      const len = targetClusters[i]!.length;
+      if (offset < at + len) return i;
+      at += len;
     }
-
-    const minutes = elapsed / 60;
-    const cpm = minutes > 0 ? correct / minutes : 0;
-    const typedWords = countWords(target.slice(0, correct));
-    const wpm = minutes > 0 ? typedWords / minutes : 0;
-    const accuracy = typed.length > 0 ? (correct / typed.length) * 100 : 100;
-    const progress = target.length > 0 ? Math.min(correct / target.length, 1) * 100 : 0;
-    const remaining =
-      timeLimit && startedAt !== null ? Math.max(timeLimit - elapsed, 0) : (timeLimit ?? null);
-
-    return { elapsed, wpm, cpm, accuracy, mistakes, correct, progress, remaining };
-  }, [tick, finishedAt, startedAt, typed, target, mistakes, timeLimit]);
-
-  // auto-finish on time limit
-  useEffect(() => {
-    if (!timeLimit || completed || startedAt === null) return;
-    if (stats.remaining !== null && stats.remaining <= 0) finish();
-  }, [timeLimit, completed, startedAt, stats.remaining, finish]);
+    return targetClusters.length;
+  }, [comparison, typed, targetClusters, mode, target, correct]);
 
   return {
     typed,
     target,
+    composition,
+    mode,
     completed,
     started: startedAt !== null,
     stats,
+    comparison,
+    unitStates: comparison.unitStates as TypingUnitState[],
+    targetClusters,
+    caretClusterIndex,
+    nextHintUnit: hintUnit,
+    nextCluster: targetClusters[caretClusterIndex] ?? null,
     errorIndexes: errorIndexes.current,
-    handleChange,
+    wrongFlash,
+    handleCommit,
+    handleBackspace,
+    setCompositionText,
+    clearComposition,
     reset,
     finish,
   };

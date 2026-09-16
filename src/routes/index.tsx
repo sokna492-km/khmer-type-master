@@ -92,7 +92,7 @@ function Index() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-svh overflow-hidden bg-background text-foreground">
       {/* Persistent Left Navigation Sidebar (Desktop + Mobile Drawer) */}
       <NavigationSidebar
         currentLevelId={activeLevel?.id ?? null}
@@ -106,10 +106,10 @@ function Index() {
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Content Area — min-h-0 so children can shrink inside the locked viewport */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile Top Navigation Bar */}
-        <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between border-b border-border bg-card/90 backdrop-blur-md px-4 py-3">
+        <div className="lg:hidden sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-border bg-card/90 backdrop-blur-md px-4 py-3">
           <button
             onClick={() => setIsMobileNavOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
@@ -128,22 +128,24 @@ function Index() {
         </div>
 
         {/* View Switcher: Practice Screen or Learning Path Overview */}
-        {activeLevel && activeLesson ? (
-          <TypingPracticeScreen
-            level={activeLevel}
-            lesson={activeLesson}
-            progress={progress}
-            onRecordProgress={record}
-            onSelectLesson={handleSelectLesson}
-            onBackToOverview={handleGoHome}
-          />
-        ) : (
-          <LearningPathView
-            progress={progress}
-            loaded={loaded}
-            onSelectLesson={handleSelectLesson}
-          />
-        )}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {activeLevel && activeLesson ? (
+            <TypingPracticeScreen
+              level={activeLevel}
+              lesson={activeLesson}
+              progress={progress}
+              onRecordProgress={record}
+              onSelectLesson={handleSelectLesson}
+              onBackToOverview={handleGoHome}
+            />
+          ) : (
+            <LearningPathView
+              progress={progress}
+              loaded={loaded}
+              onSelectLesson={handleSelectLesson}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

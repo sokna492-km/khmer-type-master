@@ -1,4 +1,12 @@
 export function renderErrorPage(): string {
+  const origin =
+    typeof import.meta !== "undefined"
+      ? (import.meta.env?.VITE_KRUMATH_ORIGIN as string | undefined)
+      : undefined;
+  const home = origin?.length
+    ? `${origin.replace(/\/$/, "")}/home`
+    : "https://krumath.com/home";
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -22,7 +30,7 @@ export function renderErrorPage(): string {
       <p>Something went wrong on our end. You can try refreshing or head back home.</p>
       <div class="actions">
         <button class="primary" onclick="location.reload()">Try again</button>
-        <a class="secondary" href="/">Go home</a>
+        <a class="secondary" href="${home}">Go home</a>
       </div>
     </div>
   </body>

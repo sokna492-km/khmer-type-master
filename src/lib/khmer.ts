@@ -1,19 +1,37 @@
 /**
- * Khmer Unicode text utilities.
- *
- * Rather than re-implementing an input method, the trainer relies on the
- * platform's own Khmer Unicode IME / keyboard (NiDA layout) for input and only
- * handles *analysis* of the resulting Unicode text here:
- *
- *  - cluster segmentation (base + COENG subscripts + vowels + diacritics)
- *  - ZWSP (U+200B) awareness, since Khmer word breaks are invisible
- *  - safe rendering of orphan combining marks via dotted circle (U+25CC)
- *
- * This keeps Unicode handling in one small, testable module.
+ * Project facade over khmer-segment — one Unicode pipeline for the trainer.
+ * Do not use raw String.normalize('NFC') for Khmer compare; it can harm mark order.
  */
 
-export const COENG = "\u17D2"; // ្  subscript marker
-export const ZWSP = "\u200B"; // invisible word break
+import {
+  compareTyping,
+  computeTypingMetrics,
+  countClusters as ksCountClusters,
+  deleteBackward as ksDeleteBackward,
+  getCaretBoundaries,
+  getClusterBoundaries,
+  isKhmerChar,
+  normalizeKhmer,
+  splitClusters as ksSplitClusters,
+  type TypingComparison,
+  type TypingMetrics,
+  type TypingUnitState,
+} from "khmer-segment";
+
+export {
+  compareTyping,
+  computeTypingMetrics,
+  getCaretBoundaries,
+  getClusterBoundaries,
+  isKhmerChar,
+  normalizeKhmer,
+  type TypingComparison,
+  type TypingMetrics,
+  type TypingUnitState,
+};
+
+export const COENG = "\u17D2";
+export const ZWSP = "\u200B";
 export const ZWNJ = "\u200C";
 export const DOTTED_CIRCLE = "\u25CC";
 
@@ -25,61 +43,33 @@ export function isCombining(ch: string): boolean {
 }
 
 export function isKhmer(ch: string): boolean {
-  return /[\u1780-\u17FF\u19E0-\u19FF]/.test(ch);
+  return isKhmerChar(ch) || /[\u19E0-\u19FF]/.test(ch);
 }
 
-/**
- * Split text into typographic clusters: a base character plus every
- * subscript (COENG + consonant), vowel sign and diacritic attached to it.
- * ZWSP is kept as its own cluster so it can be shown to the learner.
- */
+/** Sanitize a lesson line before it becomes a typing target. */
+export function sanitizeTarget(text: string): string {
+  return normalizeKhmer(text);
+}
+
 export function splitClusters(text: string): string[] {
-  const out: string[] = [];
-  let i = 0;
+  return ksSplitClusters(text);
+}
 
-  while (i < text.length) {
-    const ch = text[i]!;
-
-    if (ch === ZWSP) {
-      out.push(ch);
-      i += 1;
-      continue;
-    }
-
-    let cluster = ch;
-    i += 1;
-
-    while (i < text.length) {
-      const c = text[i]!;
-      if (c === COENG) {
-        const next = text[i + 1];
-        cluster += next ? c + next : c;
-        i += next ? 2 : 1;
-        continue;
-      }
-      if (isCombining(c)) {
-        cluster += c;
-        i += 1;
-        continue;
-      }
-      break;
-    }
-
-    out.push(cluster);
-  }
-
-  return out;
+export function countClusters(text: string): number {
+  return ksCountClusters(text);
 }
 
 /** Character offset of the first code unit of every cluster. */
 export function clusterOffsets(text: string): number[] {
-  const offsets: number[] = [];
-  let at = 0;
-  for (const cluster of splitClusters(text)) {
-    offsets.push(at);
-    at += cluster.length;
-  }
-  return offsets;
+  return getClusterBoundaries(text).map((b) => b.start);
+}
+
+export function deleteBackward(
+  text: string,
+  cursorIndex: number,
+  options?: { normalize?: boolean },
+): { text: string; cursorIndex: number } {
+  return ksDeleteBackward(text, cursorIndex, options);
 }
 
 /** A cluster that begins with a combining mark needs a carrier to render. */
@@ -101,11 +91,30 @@ export function describeChar(ch: string | undefined): string | null {
   return null;
 }
 
-/** Count Khmer clusters, used as the "word" unit proxy for CPM/WPM. */
-export function countClusters(text: string): number {
-  return splitClusters(text).length;
-}
-
 export function countWords(text: string): number {
   return text.split(/[\s\u200B]+/).filter((w) => w.length > 0).length;
+}
+
+/**
+ * Next code unit the learner should produce for NiDA key hints.
+ * Uses normalized code-unit prefix so COENG+consonant sequences hint stepwise
+ * (base → ្ → consonant), not only whole clusters.
+ */
+export function nextHintUnit(target: string, typed: string): string | null {
+  const normalizedTarget = normalizeKhmer(target);
+  const normalizedTyped = normalizeKhmer(typed);
+
+  if (normalizedTyped.length >= normalizedTarget.length) {
+    if (normalizedTyped === normalizedTarget) return null;
+    // Free mode: past or mismatched — hint expected unit at first mismatch
+    const comparison = compareTyping(target, typed);
+    return normalizedTarget[comparison.mismatchOffset] ?? null;
+  }
+
+  if (normalizedTarget.startsWith(normalizedTyped)) {
+    return normalizedTarget[normalizedTyped.length] ?? null;
+  }
+
+  const comparison = compareTyping(target, typed);
+  return normalizedTarget[comparison.mismatchOffset] ?? null;
 }
