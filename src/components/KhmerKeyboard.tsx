@@ -153,39 +153,34 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 w-full select-none flex-col justify-center",
+        "relative flex w-full min-h-0 select-none flex-col overflow-hidden",
         className,
       )}
     >
-      {/* Keyboard Layout Flanked by Real-Time Auto-Highlighting Hands directly on background */}
-      <div className="flex min-h-0 flex-1 items-center justify-center gap-1 sm:gap-2 md:gap-3 lg:gap-4">
-        {/* Left Hand Guide */}
-        <div className="hidden sm:flex h-full max-h-full w-20 shrink-0 flex-col items-center justify-center sm:w-24 md:w-28 lg:w-32 xl:w-36">
+      {/* Same layout on home and practice: hands in flow, width-driven keyboard */}
+      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center gap-1 sm:gap-2 md:gap-3 lg:gap-4">
+        <div className="kb-side-hands hidden w-[clamp(4rem,10vw,9rem)] shrink-0 flex-col items-center justify-center sm:flex">
           <LeftHandSvg
             activeFingers={activeLeftFingers}
             pressedFingers={pressedLeftFingers}
-            className="h-auto max-h-[min(100%,16rem)] w-full select-none pointer-events-none"
+            className="pointer-events-none h-auto max-h-[clamp(7rem,32dvh,18rem)] w-full select-none"
           />
         </div>
 
-        {/* Official Wikimedia NiDA SVG Layout with Clean Minimalist Key Highlights */}
-        <div className="relative flex h-full min-h-0 min-w-0 flex-[1.35] items-center justify-center overflow-hidden rounded-xl bg-transparent select-none">
-          {/* SVG Keyboard Graphic — capped to parent height so the page never grows */}
-          <div className="relative max-h-full w-full">
+        <div className="relative min-h-0 min-w-0 flex-[2] overflow-hidden rounded-xl bg-transparent select-none">
+          <div className="relative w-full">
             <img
               src={publicAsset("khmer_layout.svg")}
               alt="Khmer NiDA Unicode Keyboard Layout"
-              className="mx-auto block h-auto max-h-full w-full object-contain select-none pointer-events-none"
+              className="pointer-events-none mx-auto block h-auto w-full object-contain select-none"
               draggable={false}
             />
 
-            {/* Dynamic Real-Time Interactive SVG Highlight Layer */}
             <svg
               viewBox="0 0 857 333"
               className="pointer-events-none absolute inset-0 h-full w-full"
               preserveAspectRatio="xMidYMid meet"
             >
-              {/* 1. Target / Shift (suppressed while hovering so one focus key reads clearly) */}
               {!isHovering && shiftKeyBox && (
                 <path
                   d={shiftKeyBox.d}
@@ -206,7 +201,6 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
                 />
               )}
 
-              {/* 2. Hover key highlight (sky — distinct from amber target and emerald press) */}
               {hoveredKeyBox && (
                 <path
                   d={hoveredKeyBox.d}
@@ -217,7 +211,6 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
                 />
               )}
 
-              {/* 3. Physical Keypress Real-time Feedback (emerald — always on top) */}
               {pressedKeyBox && (
                 <path
                   d={pressedKeyBox.d}
@@ -229,7 +222,6 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
               )}
             </svg>
 
-            {/* Interactive hitboxes for keys — hover syncs hands; click flashes press */}
             <div
               className="pointer-events-auto absolute inset-0 h-full w-full"
               onMouseLeave={clearHover}
@@ -258,30 +250,29 @@ export function KhmerKeyboard({ nextChar, className }: Props) {
           </div>
         </div>
 
-        {/* Right Hand Guide */}
-        <div className="hidden sm:flex h-full max-h-full w-20 shrink-0 flex-col items-center justify-center sm:w-24 md:w-28 lg:w-32 xl:w-36">
+        <div className="kb-side-hands hidden w-[clamp(4rem,10vw,9rem)] shrink-0 flex-col items-center justify-center sm:flex">
           <RightHandSvg
             activeFingers={activeRightFingers}
             pressedFingers={pressedRightFingers}
-            className="h-auto max-h-[min(100%,16rem)] w-full select-none pointer-events-none"
+            className="pointer-events-none h-auto max-h-[clamp(7rem,32dvh,18rem)] w-full select-none"
           />
         </div>
       </div>
 
-      {/* Mobile Hand Guide (visible only on small screens < sm) */}
-      <div className="mt-2 flex shrink-0 items-center justify-center gap-8 pt-2 sm:hidden">
-        <div className="flex w-24 flex-col items-center">
+      {/* Bottom hands: narrow screens, or short height (see .kb-bottom-hands) */}
+      <div className="kb-bottom-hands mt-2 flex shrink-0 items-center justify-center gap-8 pt-2 sm:hidden">
+        <div className="flex w-[clamp(4.5rem,18vw,6rem)] flex-col items-center">
           <LeftHandSvg
             activeFingers={activeLeftFingers}
             pressedFingers={pressedLeftFingers}
-            className="h-auto w-20"
+            className="h-auto w-full max-h-[clamp(4rem,18dvh,6rem)]"
           />
         </div>
-        <div className="flex w-24 flex-col items-center">
+        <div className="flex w-[clamp(4.5rem,18vw,6rem)] flex-col items-center">
           <RightHandSvg
             activeFingers={activeRightFingers}
             pressedFingers={pressedRightFingers}
-            className="h-auto w-20"
+            className="h-auto w-full max-h-[clamp(4rem,18dvh,6rem)]"
           />
         </div>
       </div>

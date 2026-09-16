@@ -6,9 +6,10 @@ interface HandSvgProps {
   activeFingers?: number[];
   pressedFingers?: number[];
   className?: string;
-  activeColor?: string;
-  pressedColor?: string;
 }
+
+const ACTIVE_FINGER = "#f59e0b";
+const PRESSED_FINGER = "#10b981";
 
 const FINGER_NAMES: Record<number, string> = {
   1: "មេដៃ (Thumb)",
@@ -22,8 +23,6 @@ export function LeftHandSvg({
   activeFingers = [],
   pressedFingers = [],
   className,
-  activeColor = "#f59e0b", // Warm amber/orange matching the reference
-  pressedColor = "#10b981", // Emerald green for keypress
 }: HandSvgProps) {
   return (
     <svg
@@ -63,12 +62,12 @@ export function LeftHandSvg({
         let strokeOpacity = 0.2;
 
         if (isPressed) {
-          fill = pressedColor;
+          fill = PRESSED_FINGER;
           stroke = "#059669";
           strokeWidth = "2.5";
           strokeOpacity = 1;
         } else if (isActive) {
-          fill = activeColor;
+          fill = ACTIVE_FINGER;
           stroke = "#d97706";
           strokeWidth = "2.5";
           strokeOpacity = 1;
@@ -97,8 +96,6 @@ export function RightHandSvg({
   activeFingers = [],
   pressedFingers = [],
   className,
-  activeColor = "#f59e0b",
-  pressedColor = "#10b981",
 }: HandSvgProps) {
   return (
     <svg
@@ -138,12 +135,12 @@ export function RightHandSvg({
         let strokeOpacity = 0.2;
 
         if (isPressed) {
-          fill = pressedColor;
+          fill = PRESSED_FINGER;
           stroke = "#059669";
           strokeWidth = "2.5";
           strokeOpacity = 1;
         } else if (isActive) {
-          fill = activeColor;
+          fill = ACTIVE_FINGER;
           stroke = "#d97706";
           strokeWidth = "2.5";
           strokeOpacity = 1;

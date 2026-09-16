@@ -31,7 +31,6 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
-  --color-primary-glow: var(--primary-glow);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -40,10 +39,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
-  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -85,8 +82,6 @@
   --primary: oklch(0.546 0.215 262.9);
   --primary-foreground: oklch(0.99 0.005 250);
   --primary-soft: oklch(0.955 0.024 255);
-  --primary-glow: oklch(0.74 0.13 245);
-
   --secondary: oklch(0.968 0.011 250);
   --secondary-foreground: oklch(0.3 0.04 258);
 
@@ -98,11 +93,9 @@
 
   --destructive: oklch(0.585 0.223 26.5);
   --destructive-foreground: oklch(0.99 0.005 250);
-  --destructive-soft: oklch(0.955 0.038 25);
 
   --success: oklch(0.585 0.14 156);
   --success-foreground: oklch(0.99 0.005 250);
-  --success-soft: oklch(0.952 0.045 156);
 
   --warning: oklch(0.72 0.15 70);
 
@@ -115,8 +108,6 @@
   --sidebar-accent: oklch(0.955 0.024 255);
   --sidebar-border: oklch(0.925 0.012 252);
 
-  --gradient-sky: linear-gradient(180deg, oklch(0.975 0.026 245) 0%, oklch(0.995 0.006 250) 100%);
-  --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-glow) 100%);
   --shadow-card: 0 1px 2px 0 oklch(0 0 0 / 0.03);
   --shadow-key: 0 1px 0 oklch(0.85 0.02 252);
 }
@@ -130,13 +121,11 @@
     font-size: 16px;
     -webkit-text-size-adjust: 100%;
     height: 100%;
-    overflow: hidden;
   }
 
   body {
     font-size: 1rem;
     height: 100%;
-    overflow: hidden;
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-khmer);
@@ -149,14 +138,48 @@
     font-family: var(--font-khmer);
     line-height: 2.1;
   }
-}
 
-@utility surface-sky {
-  background-image: var(--gradient-sky);
-}
+  /* Soft fullscreen: denser home hero when viewport is short */
+  @media (max-height: 700px) {
+    .home-hero-title {
+      font-size: 1.5rem;
+      line-height: 1.25;
+    }
+    .home-hero-sub {
+      display: none;
+    }
+    .home-stat-value {
+      font-size: 1.5rem;
+    }
+    .home-stat-card {
+      padding: 0.625rem;
+    }
+  }
 
-@utility surface-primary {
-  background-image: var(--gradient-primary);
+  /* Soft fullscreen: side hands off when height is tight; overlay compact bottom hands
+     so they do not steal flex height and crush the keyboard (overflowed onto the prompt). */
+  @media (max-height: 640px) {
+    .kb-side-hands {
+      display: none !important;
+    }
+    .kb-bottom-hands {
+      display: flex !important;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      margin-top: 0;
+      padding-top: 0.25rem;
+      padding-bottom: 0.25rem;
+      pointer-events: none;
+      background: linear-gradient(to top, var(--background) 40%, transparent);
+    }
+    .kb-bottom-hands svg,
+    .kb-bottom-hands img {
+      max-height: 3.25rem !important;
+    }
+  }
 }
 
 @utility card-elevated {

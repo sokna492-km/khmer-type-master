@@ -355,7 +355,7 @@ export function TypingPracticeScreen({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+      className="flex min-h-full flex-col bg-background text-foreground"
       onClick={() => {
         if (!showResultsModal) composition.focus();
       }}
@@ -459,7 +459,7 @@ export function TypingPracticeScreen({
         </div>
       </header>
 
-      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-start overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col justify-start overflow-y-auto px-4 py-[clamp(0.75rem,2dvh,1.25rem)] sm:px-6">
         <div className="grid grid-cols-4 gap-2.5 mb-4">
           <div className="card-elevated p-3 text-center">
             <span className="km text-sm text-muted-foreground block font-medium">ល្បឿន WPM</span>
@@ -671,8 +671,11 @@ export function TypingPracticeScreen({
         </div>
 
         {showKeyboard && (
-          <div className="mt-4 min-h-0 flex-1">
-            <KhmerKeyboard className="h-full max-h-[min(100%,280px)] sm:max-h-[min(100%,320px)]" {...(nextChar ? { nextChar } : {})} />
+          <div className="mt-3 flex w-full min-h-0 flex-1 items-center justify-center sm:mt-4">
+            <KhmerKeyboard
+              className="w-full"
+              {...(nextChar ? { nextChar } : {})}
+            />
           </div>
         )}
       </main>

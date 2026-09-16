@@ -8,7 +8,6 @@ import {
   sanitizeTarget,
   splitClusters,
   type TypingComparison,
-  type TypingUnitState,
 } from "@/lib/khmer";
 import { countFreeMistakeDelta, strictCommit } from "@/lib/typing-input";
 import { correctCodeUnitCount } from "@/lib/typing-metrics";
@@ -16,20 +15,18 @@ import { correctCodeUnitCount } from "@/lib/typing-metrics";
 export type TypingMode = "strict" | "free";
 
 /** Line-local counters. Lesson HUD must use useLessonStats, not these WPM/accuracy fields. */
-export type TypingStats = {
+type TypingStats = {
   elapsed: number;
   mistakes: number;
   correct: number;
   progress: number;
 };
 
-export type CommitResult =
+type CommitResult =
   | { accepted: true; value: string; mistakesAdded: number }
   | { accepted: false; value: string; mistakesAdded: number };
 
-export type TypingSession = ReturnType<typeof useTypingSession>;
-
-export type UseTypingSessionOptions = {
+type UseTypingSessionOptions = {
   target: string;
   mode: TypingMode;
 };
@@ -228,18 +225,11 @@ export function useTypingSession({ target: rawTarget, mode }: UseTypingSessionOp
   return {
     typed,
     target,
-    composition,
-    mode,
     completed,
-    started: startedAt !== null,
     stats,
-    comparison,
-    unitStates: comparison.unitStates as TypingUnitState[],
     targetClusters,
     caretClusterIndex,
     nextHintUnit: hintUnit,
-    nextCluster: targetClusters[caretClusterIndex] ?? null,
-    errorIndexes: errorIndexes.current,
     wrongFlash,
     handleCommit,
     handleBackspace,

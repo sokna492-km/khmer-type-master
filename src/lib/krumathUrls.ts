@@ -1,8 +1,5 @@
 const DEFAULT_HOME = "https://krumath.com/home";
 
-/** Public path on krumath.com for this feature app. */
-export const APP_SLUG = "/khmer-typing-master";
-
 export function krumathHomeUrl(): string {
   const origin = import.meta.env.VITE_KRUMATH_ORIGIN as string | undefined;
   if (origin && origin.length > 0) {

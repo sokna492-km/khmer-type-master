@@ -6,20 +6,16 @@
 
 import { COENG, ZWSP } from "./khmer";
 
-export type KeyDef = {
+type KeyDef = {
   /** physical key label (US layout) */
   code: string;
   /** Khmer output without Shift */
   normal: string;
   /** Khmer output with Shift */
   shift?: string;
-  /** flex growth for wide keys */
-  wide?: number;
-  /** display label instead of the produced character */
-  label?: string;
 };
 
-export const KEY_ROWS: KeyDef[][] = [
+const KEY_ROWS: KeyDef[][] = [
   [
     { code: "`", normal: "«", shift: "»" },
     { code: "1", normal: "១", shift: "!" },
@@ -75,21 +71,21 @@ export const KEY_ROWS: KeyDef[][] = [
     { code: ".", normal: ".", shift: "៚" },
     { code: "/", normal: "៍", shift: "?" },
   ],
-  // Windows Khmer / NiDA: Space → ZWSP, Shift+Space → visible space (verified via runtime IME logs)
-  [{ code: "space", normal: ZWSP, shift: " ", wide: 8, label: "Space" }],
+  // Windows Khmer / NiDA: Space → ZWSP, Shift+Space → visible space
+  [{ code: "space", normal: ZWSP, shift: " " }],
 ];
 
-export type KeyHint = { code: string; shift: boolean; altGr: boolean };
+export type KeyHint = { code: string; shift: boolean };
 
 const HINTS = new Map<string, KeyHint>();
 
 for (const row of KEY_ROWS) {
   for (const key of row) {
     if (key.normal && !HINTS.has(key.normal)) {
-      HINTS.set(key.normal, { code: key.code, shift: false, altGr: false });
+      HINTS.set(key.normal, { code: key.code, shift: false });
     }
     if (key.shift && !HINTS.has(key.shift)) {
-      HINTS.set(key.shift, { code: key.code, shift: true, altGr: false });
+      HINTS.set(key.shift, { code: key.code, shift: true });
     }
   }
 }

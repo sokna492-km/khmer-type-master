@@ -70,4 +70,4 @@ function Tip({
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Tip };
+export { TooltipProvider, Tip };

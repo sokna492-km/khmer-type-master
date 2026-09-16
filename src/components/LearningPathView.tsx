@@ -45,21 +45,21 @@ export function LearningPathView({
   const overallPercent = Math.round((completedLessons / (totalLessons || 1)) * 100);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
-      {/* Clean Hero Header */}
-      <section className="shrink-0 border-b border-border bg-card/40 py-5 sm:py-7">
+    <div className="flex min-h-full flex-col bg-background text-foreground">
+      {/* Clean Hero Header — fluid padding; denser on short viewports via .home-hero-* */}
+      <section className="shrink-0 border-b border-border bg-card/40 py-[clamp(0.75rem,2.5dvh,1.75rem)]">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
+          <div className="flex flex-col items-start justify-between gap-[clamp(0.75rem,2dvh,1.25rem)] md:flex-row md:items-center">
             <div className="max-w-xl">
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground km">
+              <h1 className="home-hero-title text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground km">
                 Khmer Type Master
               </h1>
-              <p className="mt-2 text-base sm:text-lg text-muted-foreground km">
+              <p className="home-hero-sub mt-2 text-base sm:text-lg text-muted-foreground km">
                 កម្មវិធីហាត់វាយអក្សរខ្មែរតាមស្ដង់ដារក្ដាចុចយូនីកូដ
               </p>
 
               {nextLessonToLearn && (
-                <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="mt-[clamp(0.75rem,2dvh,1rem)] flex flex-wrap items-center gap-3">
                   <button
                     onClick={() =>
                       onSelectLesson(nextLessonToLearn!.level, nextLessonToLearn!.lesson)
@@ -78,11 +78,11 @@ export function LearningPathView({
             {/* Quick Stats Grid — averages of each completed lesson's best scores */}
             <div
               className={cn(
-                "grid w-full min-w-[280px] grid-cols-2 gap-3 transition-opacity md:w-auto",
+                "grid w-full min-w-[280px] grid-cols-2 gap-2 sm:gap-3 transition-opacity md:w-auto",
                 !loaded && "opacity-50",
               )}
             >
-              <div className="card-elevated p-3.5">
+              <div className="home-stat-card card-elevated p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="km text-base font-bold text-muted-foreground">វឌ្ឍនភាព</span>
                   <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning">
@@ -90,7 +90,7 @@ export function LearningPathView({
                   </span>
                 </div>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="km text-3xl sm:text-4xl font-extrabold text-primary">
+                  <span className="home-stat-value km text-3xl sm:text-4xl font-extrabold text-primary">
                     {loaded ? `${khmerNumber(overallPercent)}%` : "—"}
                   </span>
                 </div>
@@ -102,7 +102,7 @@ export function LearningPathView({
                 </div>
               </div>
 
-              <div className="card-elevated p-3.5">
+              <div className="home-stat-card card-elevated p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="km text-base font-bold text-muted-foreground">មធ្យម WPM</span>
                   <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -110,7 +110,7 @@ export function LearningPathView({
                   </span>
                 </div>
                 <div className="mt-2 flex items-baseline gap-1.5">
-                  <span className="km text-3xl sm:text-4xl font-extrabold text-foreground">
+                  <span className="home-stat-value km text-3xl sm:text-4xl font-extrabold text-foreground">
                     {loaded ? khmerNumber(avgWpm) : "—"}
                   </span>
                   <span className="text-base font-mono font-bold text-muted-foreground">WPM</span>
@@ -118,7 +118,7 @@ export function LearningPathView({
                 <p className="km mt-1 text-xs text-muted-foreground">មធ្យមពិន្ទុល្អបំផុត</p>
               </div>
 
-              <div className="card-elevated p-3.5">
+              <div className="home-stat-card card-elevated p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="km text-base font-bold text-muted-foreground">មធ្យមត្រឹមត្រូវ</span>
                   <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
@@ -126,14 +126,14 @@ export function LearningPathView({
                   </span>
                 </div>
                 <div className="mt-2 flex items-baseline gap-1">
-                  <span className="km text-3xl sm:text-4xl font-extrabold text-success">
+                  <span className="home-stat-value km text-3xl sm:text-4xl font-extrabold text-success">
                     {loaded ? `${khmerNumber(avgAccuracy)}%` : "—"}
                   </span>
                 </div>
                 <p className="km mt-1 text-xs text-muted-foreground">មធ្យមពិន្ទុល្អបំផុត</p>
               </div>
 
-              <div className="card-elevated p-3.5">
+              <div className="home-stat-card card-elevated p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="km text-base font-bold text-muted-foreground">បានបញ្ចប់</span>
                   <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -141,7 +141,7 @@ export function LearningPathView({
                   </span>
                 </div>
                 <div className="mt-2 flex items-baseline gap-1.5">
-                  <span className="km text-3xl sm:text-4xl font-extrabold text-foreground">
+                  <span className="home-stat-value km text-3xl sm:text-4xl font-extrabold text-foreground">
                     {loaded ? khmerNumber(completedLessons) : "—"}
                   </span>
                   <span className="km text-base font-bold text-muted-foreground">
@@ -154,14 +154,14 @@ export function LearningPathView({
         </div>
       </section>
 
-      {/* Keyboard fills remaining viewport height */}
-      <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 pb-4 pt-4 sm:px-5 sm:pt-5">
+      {/* Keyboard grows wide on home; leftover height is a floor, not a shrink cap */}
+      <main className="mx-auto flex min-h-[18rem] w-full max-w-7xl flex-1 flex-col px-3 pb-3 pt-3 sm:min-h-[22rem] sm:px-5 sm:pb-4 sm:pt-4">
         <div className="mb-2 flex shrink-0 items-center justify-center gap-2">
           <KeyboardIcon className="size-5 text-primary" />
           <h3 className="text-lg sm:text-xl font-bold text-foreground km">ក្ដារចុចយូនីកូដ</h3>
         </div>
-        <div className="min-h-0 flex-1">
-          <KhmerKeyboard className="h-full" />
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <KhmerKeyboard className="w-full" />
         </div>
       </main>
     </div>

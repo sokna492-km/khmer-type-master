@@ -92,7 +92,7 @@ function Index() {
   };
 
   return (
-    <div className="flex h-svh overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       {/* Persistent Left Navigation Sidebar (Desktop + Mobile Drawer) */}
       <NavigationSidebar
         currentLevelId={activeLevel?.id ?? null}
@@ -106,7 +106,7 @@ function Index() {
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* Main Content Area — min-h-0 so children can shrink inside the locked viewport */}
+      {/* Main Content Area — soft overflow so short/landscape windows can scroll */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile Top Navigation Bar */}
         <div className="lg:hidden sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-border bg-card/90 backdrop-blur-md px-4 py-3">
@@ -128,7 +128,7 @@ function Index() {
         </div>
 
         {/* View Switcher: Practice Screen or Learning Path Overview */}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {activeLevel && activeLesson ? (
             <TypingPracticeScreen
               level={activeLevel}
