@@ -20,7 +20,7 @@ import {
 describe("khmer-segment facade", () => {
   it("splits stacked coeng clusters", () => {
     expect(splitClusters("ក្ក")).toEqual(["ក្ក"]);
-    expect(splitClusters("ស្តី").length).toBeGreaterThanOrEqual(1);
+    expect(splitClusters("ស្ដី").length).toBeGreaterThanOrEqual(1);
     const complex = splitClusters("កន្ត្រៃ");
     expect(complex.length).toBeGreaterThan(1);
     expect(complex.join("")).toBe(normalizeKhmer("កន្ត្រៃ"));
@@ -132,7 +132,7 @@ describe("Intl.Segmenter vs khmer-segment (documentation)", () => {
     if (typeof Intl === "undefined" || typeof Intl.Segmenter === "undefined") {
       return;
     }
-    const sample = "ស្តី";
+    const sample = "ស្ដី";
     const ks = splitClusters(sample);
     const intl = [
       ...new Intl.Segmenter("km", { granularity: "grapheme" }).segment(sample),

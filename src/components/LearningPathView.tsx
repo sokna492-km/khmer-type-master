@@ -55,7 +55,7 @@ export function LearningPathView({
                 Khmer Type Master
               </h1>
               <p className="home-hero-sub mt-2 text-base sm:text-lg text-muted-foreground km">
-                កម្មវិធីហាត់វាយអក្សរខ្មែរតាមស្ដង់ដារក្ដាចុចយូនីកូដ
+                កម្មវិធីហាត់វាយអក្សរខ្មែរតាមស្តង់ដារក្ដាចុចយូនីកូដ
               </p>
 
               {nextLessonToLearn && (

@@ -5,7 +5,8 @@ import { useProgress } from "@/lib/progress";
 import { NavigationSidebar } from "@/components/NavigationSidebar";
 import { LearningPathView } from "@/components/LearningPathView";
 import { TypingPracticeScreen } from "@/components/TypingPracticeScreen";
-import { Keyboard, Menu } from "lucide-react";
+import { Keyboard, Menu, Github, Heart } from "lucide-react";
+import { GITHUB_REPO_URL, krumathPricingUrl } from "@/lib/krumathUrls";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -109,10 +110,10 @@ function Index() {
       {/* Main Content Area — soft overflow so short/landscape windows can scroll */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile Top Navigation Bar */}
-        <div className="lg:hidden sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-border bg-card/90 backdrop-blur-md px-4 py-3">
+        <div className="lg:hidden sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b border-border bg-card/90 backdrop-blur-md px-3 py-3 sm:px-4">
           <button
             onClick={() => setIsMobileNavOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary transition-colors sm:px-3.5"
           >
             <Menu className="size-4.5 text-primary" />
             <span className="km">កម្រិតសិក្សា</span>
@@ -120,11 +121,34 @@ function Index() {
 
           <button
             onClick={handleGoHome}
-            className="flex items-center gap-2 text-sm sm:text-base font-bold text-foreground"
+            className="flex min-w-0 flex-1 items-center justify-center gap-1.5 text-sm font-bold text-foreground sm:gap-2 sm:text-base"
           >
-            <Keyboard className="size-5 text-primary" />
-            <span>Khmer Type Master</span>
+            <Keyboard className="size-5 shrink-0 text-primary" />
+            <span className="truncate">Khmer Type Master</span>
           </button>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <a
+              href={krumathPricingUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              aria-label="បរិច្ចាគ"
+              title="បរិច្ចាគ"
+            >
+              <Heart className="size-4" />
+            </a>
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              aria-label="GitHub"
+              title="GitHub"
+            >
+              <Github className="size-4" />
+            </a>
+          </div>
         </div>
 
         {/* View Switcher: Practice Screen or Learning Path Overview */}

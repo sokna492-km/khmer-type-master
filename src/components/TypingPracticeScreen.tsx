@@ -393,7 +393,7 @@ export function TypingPracticeScreen({
               {(
                 [
                   { value: "normal", label: "តូច", preview: "text-[10px]" },
-                  { value: "large", label: "កណ្តាល", preview: "text-xs" },
+                  { value: "large", label: "កណ្ដាល", preview: "text-xs" },
                   { value: "xlarge", label: "ធំ", preview: "text-sm" },
                 ] as const
               ).map(({ value, label, preview }) => (
@@ -438,13 +438,13 @@ export function TypingPracticeScreen({
               </button>
             </Tip>
 
-            <Tip label={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}>
+            <Tip label={showKeyboard ? "លាក់ក្ដារចុច" : "បង្ហាញក្ដារចុច"}>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowKeyboard(!showKeyboard);
                 }}
-                aria-label={showKeyboard ? "លាក់ក្តារចុច" : "បង្ហាញក្តារចុច"}
+                aria-label={showKeyboard ? "លាក់ក្ដារចុច" : "បង្ហាញក្ដារចុច"}
                 className={cn(
                   "p-2 rounded-lg border transition-colors cursor-pointer",
                   showKeyboard

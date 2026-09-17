@@ -80,14 +80,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្តារចុចបង្ហាញផ្ទាល់",
+          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្ដារចុចបង្ហាញផ្ទាល់",
       },
       { name: "author", content: "Khmer Type Master" },
       { property: "og:title", content: "Khmer Type Master - រៀនវាយអក្សរខ្មែរ" },
       {
         property: "og:description",
         content:
-          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្តារចុចបង្ហាញផ្ទាល់",
+          "កម្មវិធីរៀនវាយអក្សរខ្មែរតាមកុំព្យូទ័រ NiDA Unicode ១៦ កម្រិត វាស់ល្បឿន WPM ភាពសុក្រឹត និងក្ដារចុចបង្ហាញផ្ទាល់",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

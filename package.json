@@ -19,6 +19,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "audit:coeng": "node scripts/audit-coeng-ta-da.mjs",
     "sounds": "node scripts/generate-typing-sounds.mjs"
   },
   "overrides": {

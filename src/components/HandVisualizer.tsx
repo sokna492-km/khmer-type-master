@@ -14,7 +14,7 @@ const PRESSED_FINGER = "#10b981";
 const FINGER_NAMES: Record<number, string> = {
   1: "មេដៃ (Thumb)",
   2: "ចង្អុលដៃ (Index)",
-  3: "កណ្តាល (Middle)",
+  3: "កណ្ដាល (Middle)",
   4: "នាងដៃ (Ring)",
   5: "កូនដៃ (Pinky)",
 };
@@ -157,7 +157,7 @@ export function RightHandSvg({
             strokeOpacity={strokeOpacity}
             className="transition-colors duration-150"
           >
-            <title>{`ដៃស្តាំ: ${FINGER_NAMES[fingerNum]}`}</title>
+            <title>{`ដៃស្ដាំ: ${FINGER_NAMES[fingerNum]}`}</title>
           </path>
         );
       })}

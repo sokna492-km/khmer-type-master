@@ -3,12 +3,15 @@ import { CURRICULUM, khmerNumber, type Level, type Lesson } from "@/data/curricu
 import { levelCompletion, type ProgressMap, lessonKey } from "@/lib/progress";
 import { cn } from "@/lib/utils";
 import { Tip } from "@/components/ui/tooltip";
+import { GITHUB_REPO_URL, krumathPricingUrl } from "@/lib/krumathUrls";
 import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Github,
+  Heart,
   Timer,
   X,
   Keyboard,
@@ -239,7 +242,7 @@ export function NavigationSidebar({
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border/80 bg-card/60">
+      <div className="space-y-2 p-3 border-t border-border/80 bg-card/60">
         <button
           onClick={onGoHome}
           className="w-full flex items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 py-2.5 text-sm font-medium km text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150 cursor-pointer"
@@ -247,6 +250,26 @@ export function NavigationSidebar({
           <BookOpen className="size-4" />
           <span>ទំព័រដើម</span>
         </button>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={krumathPricingUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border/80 bg-background/80 py-2 text-sm font-medium km text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+          >
+            <Heart className="size-3.5 shrink-0" />
+            <span>បរិច្ចាគ</span>
+          </a>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border/80 bg-background/80 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+          >
+            <Github className="size-3.5 shrink-0" />
+            <span>GitHub</span>
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -297,15 +320,39 @@ export function NavigationSidebar({
         })}
       </div>
 
-      <Tip label="ទំព័រដើម" side="right">
-        <button
-          onClick={onGoHome}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
-          aria-label="ទំព័រដើម"
-        >
-          <BookOpen className="size-4" />
-        </button>
-      </Tip>
+      <div className="flex flex-col items-center gap-1.5">
+        <Tip label="បរិច្ចាគ" side="right">
+          <a
+            href={krumathPricingUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="បរិច្ចាគ"
+          >
+            <Heart className="size-4" />
+          </a>
+        </Tip>
+        <Tip label="GitHub / មើលកូដ" side="right">
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="GitHub"
+          >
+            <Github className="size-4" />
+          </a>
+        </Tip>
+        <Tip label="ទំព័រដើម" side="right">
+          <button
+            onClick={onGoHome}
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
+            aria-label="ទំព័រដើម"
+          >
+            <BookOpen className="size-4" />
+          </button>
+        </Tip>
+      </div>
     </div>
   );
 
